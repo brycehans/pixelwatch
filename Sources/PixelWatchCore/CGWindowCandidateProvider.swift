@@ -2,6 +2,18 @@ import AppKit
 import CoreGraphics
 import Foundation
 
+public protocol WindowCandidateProviding: Sendable {
+  func candidates() -> [WindowCandidate]
+}
+
+public struct LiveWindowCandidateProvider: WindowCandidateProviding {
+  public init() {}
+
+  public func candidates() -> [WindowCandidate] {
+    CGWindowCandidateProvider().candidates()
+  }
+}
+
 public struct CGWindowCandidateProvider {
   private let windowInfoProvider: () -> [[String: Any]]
   private let bundleIdentifierForProcessID: (pid_t) -> String?

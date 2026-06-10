@@ -1,5 +1,90 @@
 import Foundation
 
+public enum CaptureStage {
+  public static func start(
+    bus: EventBus,
+    store: WatcherStore,
+    windowProvider: some WindowCandidateProviding = LiveWindowCandidateProvider(),
+    capturer: some WindowCapturing = ScreenCaptureKitWindowCapture(),
+    sleeper: some CaptureSleeping = TaskCaptureSleeper()
+  ) -> Task<Void, Never> {
+    Task {
+      var activeTasks: [WatcherID: Task<Void, Never>] = [:]
+      var events = await bus.subscribe().makeAsyncIterator()
+
+      while !Task.isCancelled, let event = await events.next() {
+        switch event {
+        case let .armed(watcherID, _):
+          guard let watcher = await store.watcher(for: watcherID) else {
+            continue
+          }
+          activeTasks[watcherID]?.cancel()
+          activeTasks[watcherID] = captureLoop(
+            watcher: watcher,
+            bus: bus,
+            store: store,
+            windowProvider: windowProvider,
+            capturer: capturer,
+            sleeper: sleeper
+          )
+        case let .paused(watcherID, _),
+             let .thresholdExceeded(watcherID, _, _),
+             let .windowVanished(watcherID, _),
+             let .errored(watcherID, _):
+          activeTasks[watcherID]?.cancel()
+          activeTasks[watcherID] = nil
+        case .frameCaptured,
+             .diffComputed,
+             .hookStarted,
+             .hookFinished:
+          break
+        }
+      }
+
+      activeTasks.values.forEach { $0.cancel() }
+    }
+  }
+
+  private static func captureLoop(
+    watcher: Watcher,
+    bus: EventBus,
+    store: WatcherStore,
+    windowProvider: some WindowCandidateProviding,
+    capturer: some WindowCapturing,
+    sleeper: some CaptureSleeping
+  ) -> Task<Void, Never> {
+    Task {
+      while !Task.isCancelled {
+        do {
+          try await sleeper.sleep(seconds: watcher.tickIntervalSeconds)
+        } catch {
+          break
+        }
+
+        guard await store.state(for: watcher.id) == .armed else {
+          break
+        }
+
+        guard let candidate = WindowResolver.resolve(
+          binding: watcher.target,
+          candidates: windowProvider.candidates()
+        ) else {
+          await bus.publish(.windowVanished(watcherID: watcher.id, reason: .windowClosed))
+          break
+        }
+
+        do {
+          let frame = try await capturer.capture(windowID: candidate.windowID, rect: watcher.rect)
+          await bus.publish(.frameCaptured(watcherID: watcher.id, frame: frame, at: Date()))
+        } catch {
+          await bus.publish(.errored(watcherID: watcher.id, message: String(describing: error)))
+          break
+        }
+      }
+    }
+  }
+}
+
 public enum DiffStage {
   public static func start(bus: EventBus, store: WatcherStore) -> Task<Void, Never> {
     Task {

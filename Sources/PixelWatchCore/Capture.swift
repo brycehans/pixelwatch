@@ -4,6 +4,23 @@ import CoreVideo
 import Foundation
 import ScreenCaptureKit
 
+public protocol WindowCapturing: Sendable {
+  func capture(windowID: UInt32, rect: CGRect) async throws -> PixelBuffer
+}
+
+public protocol CaptureSleeping: Sendable {
+  func sleep(seconds: Double) async throws
+}
+
+public struct TaskCaptureSleeper: CaptureSleeping {
+  public init() {}
+
+  public func sleep(seconds: Double) async throws {
+    let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
+    try await Task.sleep(nanoseconds: nanoseconds)
+  }
+}
+
 public enum CaptureError: Error, Equatable {
   case windowNotFound(UInt32)
   case cropFailed(CGRect)
@@ -44,7 +61,7 @@ public enum CaptureGeometry {
   }
 }
 
-public struct ScreenCaptureKitWindowCapture {
+public struct ScreenCaptureKitWindowCapture: WindowCapturing {
   public init() {}
 
   public func capture(windowID: UInt32, rect: CGRect) async throws -> PixelBuffer {
