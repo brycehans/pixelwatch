@@ -21,6 +21,10 @@ public actor EventBus {
     }
   }
 
+  public var subscriberCount: Int {
+    subscribers.count
+  }
+
   private func removeSubscriber(_ id: UUID) {
     subscribers[id] = nil
   }
