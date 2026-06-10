@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import PixelWatchAppSupport
 import PixelWatchCore
+import SwiftUI
 
 @main
 enum PixelWatchMain {
@@ -42,7 +43,21 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   private var stageTasks: [Task<Void, Never>] = []
   private var eventTask: Task<Void, Never>?
   private var statusItem: NSStatusItem?
-  private var lastEventDescription = "No events yet"
+
+  private let popoverModel = PopoverModel()
+  private lazy var popoverController: NSHostingController<PopoverGridView> = {
+    NSHostingController(rootView: PopoverGridView(
+      model: popoverModel,
+      onAdd: { [weak self] in self?.newWatcherClicked(nil) },
+      onQuit: { NSApp.terminate(nil) }
+    ))
+  }()
+  private lazy var popover: NSPopover = {
+    let p = NSPopover()
+    p.contentViewController = popoverController
+    p.behavior = .transient
+    return p
+  }()
 
   private let overlayController = WatcherOverlayController()
   private var syncTimer: Timer?
@@ -64,10 +79,12 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_: Notification) {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    statusItem?.button?.title = "PixelWatch"
+    statusItem?.button?.title = "PW"
+    statusItem?.button?.action = #selector(togglePopover(_:))
+    statusItem?.button?.target = self
     startRuntime()
     startSyncTimer()
-    refreshMenu()
+    Task { await self.refreshPopover() }
 
     // Start the debug socket unconditionally.
     // TODO: Replace with a Settings toggle before shipping — this should be off by default.
@@ -99,6 +116,15 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  @objc private func togglePopover(_ sender: AnyObject?) {
+    guard let button = statusItem?.button else { return }
+    if popover.isShown {
+      popover.performClose(sender)
+    } else {
+      popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+  }
+
   @objc private func newWatcherClicked(_: AnyObject?) {
     Task { await coordinator.startNewWatcher() }
   }
@@ -119,7 +145,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     do {
       try persistence.save(watchers)
     } catch {
-      lastEventDescription = "Failed to save watcher: \(error)"
+      NSLog("Failed to save watcher: %@", error.localizedDescription)
     }
 
     Task {
@@ -128,7 +154,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
         await WatcherArmService.arm(watcherID: watcher.id, bus: bus, store: store)
       }
       overlayController.register(watcherID: watcher.id, for: session)
-      await MainActor.run { refreshMenu() }
+      await refreshPopover()
     }
   }
 
@@ -136,7 +162,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     do {
       watchers = try persistence.load()
     } catch {
-      lastEventDescription = "Failed to load watchers: \(error)"
+      NSLog("Failed to load watchers: %@", error.localizedDescription)
       watchers = []
     }
 
@@ -176,7 +202,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       for watcher in loadedWatchers where watcher.armed {
         await WatcherArmService.arm(watcherID: watcher.id, bus: bus, store: store)
       }
-      await MainActor.run { refreshMenu() }
+      await refreshPopover()
     }
   }
 
@@ -192,69 +218,27 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
         // observable at the 4 Hz sync cadence.
         let state = await store.state(for: watcherID)
         await MainActor.run {
-          lastEventDescription = Self.describe(event)
-          refreshMenu()
           if let state {
             overlayController.update(watcherID: watcherID, state: state)
           }
         }
+        await refreshPopover()
       }
     }
   }
 
-  private func refreshMenu() {
-    let menu = NSMenu()
-    let title = NSMenuItem(title: "PixelWatch", action: nil, keyEquivalent: "")
-    title.isEnabled = false
-    menu.addItem(title)
-    menu.addItem(NSMenuItem(
-      title: "\(watchers.count) watcher\(watchers.count == 1 ? "" : "s") loaded",
-      action: nil,
-      keyEquivalent: ""
-    ))
-    menu.addItem(NSMenuItem(title: lastEventDescription, action: nil, keyEquivalent: ""))
-    menu.addItem(.separator())
-    let newWatcher = NSMenuItem(
-      title: "+ New watcher",
-      action: #selector(newWatcherClicked(_:)),
-      keyEquivalent: "n"
-    )
-    newWatcher.target = self
-    menu.addItem(newWatcher)
-    menu.addItem(.separator())
-    menu.addItem(NSMenuItem(
-      title: "Quit PixelWatch",
-      action: #selector(NSApplication.terminate(_:)),
-      keyEquivalent: "q"
-    ))
-    statusItem?.menu = menu
-  }
-
-  private static func describe(_ event: PixelWatchEvent) -> String {
-    switch event {
-    case .armed:
-      "Armed"
-    case .frameCaptured:
-      "Frame captured"
-    case let .diffComputed(_, score, _):
-      "Diff score \(format(score))"
-    case let .thresholdExceeded(_, score, _):
-      "Fired at score \(format(score))"
-    case let .windowVanished(_, reason):
-      "Window vanished: \(reason)"
-    case let .hookStarted(_, _, reason):
-      "Hook started: \(reason)"
-    case let .hookFinished(_, exit, _, _):
-      "Hook finished: \(exit)"
-    case .paused:
-      "Paused"
-    case let .errored(_, message):
-      "Error: \(message)"
+  private func refreshPopover() async {
+    var items: [WatcherThumbnailItem] = []
+    for watcher in watchers {
+      let snap = await store.snapshot(for: watcher.id)
+      items.append(WatcherThumbnailItem(
+        id: watcher.id,
+        name: watcher.name,
+        state: snap?.state ?? .idle,
+        latestFrame: snap?.latestFrame
+      ))
     }
-  }
-
-  private static func format(_ value: Double) -> String {
-    String(format: "%.4f", value)
+    await MainActor.run { self.popoverModel.items = items }
   }
 
   private static var watchersURL: URL {
