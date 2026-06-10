@@ -53,10 +53,10 @@ enum CGWindowCandidateParser {
     _ info: [String: Any],
     bundleIdentifierForProcessID: (pid_t) -> String?
   ) -> WindowCandidate? {
-    guard let windowID = uint32Value(info[String(kCGWindowNumber)]),
-          let processID = processIDValue(info[String(kCGWindowOwnerPID)]),
+    guard let windowID = CGWindowDictParser.uint32Value(info[String(kCGWindowNumber)]),
+          let processID = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)]),
           let title = info[String(kCGWindowName)] as? String,
-          let bounds = rectValue(info[String(kCGWindowBounds)]),
+          let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]),
           let bundleID = bundleIdentifierForProcessID(processID) else {
       return nil
     }
@@ -68,8 +68,13 @@ enum CGWindowCandidateParser {
       bounds: bounds
     )
   }
+}
 
-  private static func uint32Value(_ value: Any?) -> UInt32? {
+/// Shared numeric / boolean / rect coercion helpers for `CGWindowListCopyWindowInfo`
+/// dictionaries. Live calls return `NSNumber`-typed values, but unit tests
+/// typically use raw `Int` / `Bool`, so each helper accepts both.
+public enum CGWindowDictParser {
+  public static func uint32Value(_ value: Any?) -> UInt32? {
     switch value {
     case let value as UInt32:
       value
@@ -84,7 +89,7 @@ enum CGWindowCandidateParser {
     }
   }
 
-  private static func processIDValue(_ value: Any?) -> pid_t? {
+  public static func processIDValue(_ value: Any?) -> pid_t? {
     switch value {
     case let value as pid_t:
       value
@@ -97,7 +102,29 @@ enum CGWindowCandidateParser {
     }
   }
 
-  private static func rectValue(_ value: Any?) -> CGRect? {
+  public static func intValue(_ value: Any?) -> Int? {
+    switch value {
+    case let value as Int:
+      value
+    case let value as NSNumber:
+      value.intValue
+    default:
+      nil
+    }
+  }
+
+  public static func boolValue(_ value: Any?) -> Bool? {
+    switch value {
+    case let value as Bool:
+      value
+    case let value as NSNumber:
+      value.boolValue
+    default:
+      nil
+    }
+  }
+
+  public static func rectValue(_ value: Any?) -> CGRect? {
     guard let dictionary = value as? [String: Any],
           let x = cgFloatValue(dictionary["X"]),
           let y = cgFloatValue(dictionary["Y"]),
@@ -109,7 +136,7 @@ enum CGWindowCandidateParser {
     return CGRect(x: x, y: y, width: width, height: height)
   }
 
-  private static func cgFloatValue(_ value: Any?) -> CGFloat? {
+  public static func cgFloatValue(_ value: Any?) -> CGFloat? {
     switch value {
     case let value as CGFloat:
       value

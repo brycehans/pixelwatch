@@ -1,6 +1,7 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import PixelWatchCore
 
 public protocol FocusedWindowProviding: Sendable {
   func focusedWindow() -> WindowSnapshot?
@@ -49,19 +50,21 @@ public struct CGFocusedWindowProvider: FocusedWindowProviding {
 
     let windows = windowInfoProvider()
     for info in windows {
-      guard let ownerPID = Self.processIDValue(info[String(kCGWindowOwnerPID)]),
+      guard let ownerPID = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)]),
             ownerPID == frontmost.pid else {
         continue
       }
 
-      let layer = Self.intValue(info[String(kCGWindowLayer)]) ?? 0
+      let layer = CGWindowDictParser.intValue(info[String(kCGWindowLayer)]) ?? 0
       guard layer == 0 else { continue }
 
-      let isOnscreen = Self.boolValue(info[String(kCGWindowIsOnscreen)]) ?? true
+      // CGWindowListCopyWindowInfo omits kCGWindowIsOnscreen for off-screen
+      // windows, so missing must mean "not visible" — skip.
+      let isOnscreen = CGWindowDictParser.boolValue(info[String(kCGWindowIsOnscreen)]) ?? false
       guard isOnscreen else { continue }
 
-      guard let windowID = Self.uint32Value(info[String(kCGWindowNumber)]),
-            let bounds = Self.rectValue(info[String(kCGWindowBounds)]) else {
+      guard let windowID = CGWindowDictParser.uint32Value(info[String(kCGWindowNumber)]),
+            let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]) else {
         continue
       }
 
@@ -79,90 +82,5 @@ public struct CGFocusedWindowProvider: FocusedWindowProviding {
     }
 
     return nil
-  }
-
-  // MARK: - Numeric coercion helpers
-  //
-  // Mirrors PixelWatchCore.CGWindowCandidateProvider — copied privately to keep
-  // PixelWatchAppSupport's surface area small. `CGWindowListCopyWindowInfo`
-  // returns `NSNumber`, but tests pass raw `Int`/`Bool`, so we accept both.
-
-  private static func uint32Value(_ value: Any?) -> UInt32? {
-    switch value {
-    case let value as UInt32:
-      value
-    case let value as UInt64 where value <= UInt64(UInt32.max):
-      UInt32(value)
-    case let value as Int where value >= 0 && value <= Int(UInt32.max):
-      UInt32(value)
-    case let value as NSNumber where value.uint64Value <= UInt64(UInt32.max):
-      value.uint32Value
-    default:
-      nil
-    }
-  }
-
-  private static func processIDValue(_ value: Any?) -> pid_t? {
-    switch value {
-    case let value as pid_t:
-      value
-    case let value as Int where value >= 0 && value <= Int(Int32.max):
-      pid_t(value)
-    case let value as NSNumber where value.int64Value >= 0 && value.int64Value <= Int64(Int32.max):
-      pid_t(value.int32Value)
-    default:
-      nil
-    }
-  }
-
-  private static func intValue(_ value: Any?) -> Int? {
-    switch value {
-    case let value as Int:
-      value
-    case let value as NSNumber:
-      value.intValue
-    default:
-      nil
-    }
-  }
-
-  private static func boolValue(_ value: Any?) -> Bool? {
-    switch value {
-    case let value as Bool:
-      value
-    case let value as NSNumber:
-      value.boolValue
-    default:
-      nil
-    }
-  }
-
-  private static func rectValue(_ value: Any?) -> CGRect? {
-    guard let dictionary = value as? [String: Any],
-          let x = cgFloatValue(dictionary["X"]),
-          let y = cgFloatValue(dictionary["Y"]),
-          let width = cgFloatValue(dictionary["Width"]),
-          let height = cgFloatValue(dictionary["Height"]) else {
-      return nil
-    }
-
-    return CGRect(x: x, y: y, width: width, height: height)
-  }
-
-  private static func cgFloatValue(_ value: Any?) -> CGFloat? {
-    switch value {
-    case let value as CGFloat:
-      value
-    case let value as Double:
-      CGFloat(value)
-    case let value as Float:
-      CGFloat(value)
-    case let value as Int:
-      CGFloat(value)
-    case let value as NSNumber:
-      CGFloat(value.doubleValue)
-    default:
-      nil
-    }
   }
 }

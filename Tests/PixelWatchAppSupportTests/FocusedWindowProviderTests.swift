@@ -21,4 +21,24 @@ final class FocusedWindowProviderTests: XCTestCase {
 
     XCTAssertEqual(provider.focusedWindow()?.windowID, 42)
   }
+
+  func testProviderSkipsEntryMissingOnscreenKey() {
+    // CGWindowListCopyWindowInfo omits kCGWindowIsOnscreen for off-screen
+    // windows; a missing key must be treated as "not visible", not "visible".
+    let provider = CGFocusedWindowProvider(
+      frontmostApplication: { FrontmostApp(pid: 99) },
+      windowInfoProvider: {
+        [
+          [
+            "kCGWindowOwnerPID": 99,
+            "kCGWindowNumber": 42,
+            "kCGWindowName": "Editor",
+            "kCGWindowBounds": ["X": 10, "Y": 20, "Width": 300, "Height": 200],
+          ],
+        ]
+      }
+    )
+
+    XCTAssertNil(provider.focusedWindow())
+  }
 }
