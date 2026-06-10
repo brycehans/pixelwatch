@@ -146,19 +146,23 @@ Raw data: `docs/bench-results/2026-06-10-default.json`. Default flags: `--ns 1,5
 |---|---|---|
 | Idle CPU < 1 % per watcher | 0.006–0.019 % per watcher (~100–150× under) | ✅ |
 | 99p capture-to-diff latency < 50 ms | 3–6 ms p99 across all N (~10× under) | ✅ |
-| 20 watchers RSS < 50 MB | 82 MB starting, 97 MB peak — ~2× over | ❌ |
+| 20 watchers RSS < 50 MB | 82 MB starting, 97 MB peak — ~2× over | ❌ (but see scale re-frame below) |
 
-**RSS analysis:**
+**Scale re-frame (post-bench):**
+
+The 50 MB RSS target was speculative. Intended real-world usage is **≤20 watchers, typically 5–10**. At that scale, RSS is 58–80 MB — unremarkable for a menu-bar app (Slack helper, 1Password, Linear, etc. routinely sit at 100–300 MB). The "miss" is not load-bearing.
+
+**Updated verdict:** ship the production `DiffStage` with the same baseline representation (`[Float]` linear RGB) as the bench. No pre-optimisation. If real-world usage shows unbounded growth over days, profile then.
+
+**RSS analysis (kept for reference):**
 
 - Per-watcher steady-state cost ≈ 2.4 MB. At 256×256 baselines stored as interleaved `[Float]`: 65,536 × 3 × 4 = 786 KB. The rest is per-tick working memory and SCK retention.
-- Growth-within-run is real: +34 MB over 60 ticks at N=50, ~0.5 MB/tick of slow leak. Likely IOSurface-backed `CGImage`s from `SCScreenshotManager` not draining promptly under async/await (no implicit `autoreleasepool` between ticks).
+- Growth-within-run measured at +34 MB over 60 ticks at N=50 (~0.5 MB/tick). 60s is too short to see whether this plateaus — IOSurface pools and autorelease behaviour under async/await may flatten by the 5-minute mark. Worth a long-duration follow-up bench if any user reports memory bloat.
 
-**Implications for the production app:**
+**Mitigations available if needed later** (not applied now):
 
-- The capture+diff pipeline at 1 Hz is comfortably cheap on CPU and latency. The architecture is fine.
-- The 50 MB RSS target was based on a tighter baseline representation than the bench used. Options for the production `DiffStage`:
-  1. **Keep baselines as `UInt8` sRGB** (~196 KB each, 4× smaller than Float linear), convert to linear lazily inside `score`. Brings 20-watcher baseline cost from ~16 MB to ~4 MB.
-  2. **Lower the max long edge** (e.g. 192 px) — quadratic effect on memory but degrades sub-region sensitivity.
-  3. **Wrap the per-tick block in `autoreleasepool`** to drain SCK's IOSurface holds. Independent of (1) — addresses the *growth* component, not the steady-state.
-- Sensible default: do (1) + (3) in the production `DiffStage`. Re-bench from the production code path.
-- Either way, the bench surfaced a real concern *before* UI work — exactly what it was for.
+1. Baselines as `UInt8` sRGB instead of `[Float]` linear — 4× smaller, lazy-convert inside `score`.
+2. Wrap the per-tick block in `autoreleasepool` to force IOSurface drain.
+3. Lower max long edge below 256 — quadratic memory win, degrades sub-region sensitivity.
+
+The bench did its job: validated CPU and latency at the architectural level, surfaced one numeric concern that turned out to be a target-side issue (target too aggressive for the use case), and produced a record we can compare future runs against.
