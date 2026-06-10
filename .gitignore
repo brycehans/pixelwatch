@@ -1,4 +1,5 @@
 .build/
+.claude/
 .swiftpm/
 *.xcodeproj/
 bench-*.json
