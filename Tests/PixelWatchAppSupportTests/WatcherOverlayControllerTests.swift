@@ -142,6 +142,134 @@ final class WatcherOverlayControllerTests: XCTestCase {
     XCTAssertEqual(overlay.frames.last, CGRect(x: 90, y: 60, width: 100, height: 100))
   }
 
+  // If the user moves the target window between clicking-to-freeze and saving
+  // the configure sheet, the anchor must reflect the bounds at freeze time,
+  // not register time. Otherwise the overlay will be off by the intervening
+  // delta the moment sync() first runs.
+  func testAnchorBoundsAreCapturedAtFreezeNotRegister() {
+    let overlay = RecordingOverlayWindow()
+    let provider = MutableWindowSnapshotProvider()
+    provider.set(
+      WindowSnapshot(
+        windowID: 42,
+        processID: 99,
+        bundleID: "com.example",
+        title: "Editor",
+        bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
+        isVisible: true
+      )
+    )
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { CGPoint(x: 220, y: 180) },
+      windowSnapshotProvider: provider,
+      frontmostProcessIDProvider: { 99 }
+    )
+
+    let session = controller.begin(windowID: 42)
+    session.freeze()  // captures anchorBounds = (100, 100, ...)
+
+    // User dawdles on the configure sheet; the target window is dragged.
+    provider.set(
+      WindowSnapshot(
+        windowID: 42,
+        processID: 99,
+        bundleID: "com.example",
+        title: "Editor",
+        bounds: CGRect(x: 300, y: 300, width: 500, height: 400),
+        isVisible: true
+      )
+    )
+
+    let watcherID = UUID()
+    controller.register(watcherID: watcherID, for: session)
+
+    // Window moves once more before the next sync tick.
+    provider.set(
+      WindowSnapshot(
+        windowID: 42,
+        processID: 99,
+        bundleID: "com.example",
+        title: "Editor",
+        bounds: CGRect(x: 400, y: 400, width: 500, height: 400),
+        isVisible: true
+      )
+    )
+    controller.sync()
+
+    // Anchor was (100, 100); current is (400, 400); delta = (+300, +300).
+    // anchorRect (frozenRect) = (120, 80). Translated: (420, 380).
+    // Pre-fix this would have computed delta from (300, 300), giving (220, 180).
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 420, y: 380, width: 100, height: 100))
+  }
+
+  // Disk-loaded watchers need overlay entries; otherwise sync()'s window-follow
+  // logic never runs for them.
+  func testRestoreCreatesEntryThatFollowsWindowMoves() {
+    let overlay = RecordingOverlayWindow()
+    let provider = MutableWindowSnapshotProvider()
+    provider.set(
+      WindowSnapshot(
+        windowID: 42,
+        processID: 99,
+        bundleID: "com.example",
+        title: "Editor",
+        bounds: CGRect(x: 200, y: 100, width: 800, height: 600),
+        isVisible: true
+      )
+    )
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { .zero },
+      windowSnapshotProvider: provider,
+      frontmostProcessIDProvider: { 99 }
+    )
+
+    let watcherID = UUID()
+    // window-relative (50, 60, 100, 100) inside window at (200, 100, ...) →
+    // initial screen rect = (250, 160, 100, 100). Border = armed (systemGreen).
+    controller.restore(
+      watcherID: watcherID,
+      windowID: 42,
+      windowRelativeRect: CGRect(x: 50, y: 60, width: 100, height: 100),
+      state: .armed
+    )
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 250, y: 160, width: 100, height: 100))
+    XCTAssertEqual(overlay.borderColors.last, .systemGreen)
+
+    // Window moves by (+30, +20). sync() should translate.
+    provider.set(
+      WindowSnapshot(
+        windowID: 42,
+        processID: 99,
+        bundleID: "com.example",
+        title: "Editor",
+        bounds: CGRect(x: 230, y: 120, width: 800, height: 600),
+        isVisible: true
+      )
+    )
+    controller.sync()
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 280, y: 180, width: 100, height: 100))
+  }
+
+  func testRestoreSkipsWatchersWhoseWindowCannotBeResolved() {
+    let overlay = RecordingOverlayWindow()
+    let provider = MutableWindowSnapshotProvider()   // empty by default
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { .zero },
+      windowSnapshotProvider: provider,
+      frontmostProcessIDProvider: { 99 }
+    )
+    controller.restore(
+      watcherID: UUID(),
+      windowID: 42,
+      windowRelativeRect: CGRect(x: 0, y: 0, width: 50, height: 50),
+      state: .idle
+    )
+    XCTAssertTrue(overlay.frames.isEmpty, "no overlay should be created when the window isn't resolvable")
+  }
+
   func testSessionCancelHidesOverlayAndStopsTracking() async {
     let overlay = RecordingOverlayWindow()
     let controller = WatcherOverlayController(

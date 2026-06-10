@@ -140,8 +140,9 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       watchers = []
     }
 
+    let loadedWatchers = watchers
     Task {
-      for watcher in watchers {
+      for watcher in loadedWatchers {
         await store.add(watcher)
       }
       await store.start()
@@ -153,7 +154,26 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       ]
       startEventMonitor()
 
-      for watcher in watchers where watcher.armed {
+      // Restore overlays for each disk-loaded watcher whose target window is
+      // currently on screen. Without this, sync()'s window-follow logic never
+      // sees these watchers — they have no entry in the controller.
+      let candidates = LiveWindowCandidateProvider().candidates()
+      await MainActor.run {
+        for watcher in loadedWatchers {
+          guard let candidate = WindowResolver.resolve(
+            binding: watcher.target,
+            candidates: candidates
+          ) else { continue }
+          overlayController.restore(
+            watcherID: watcher.id,
+            windowID: candidate.windowID,
+            windowRelativeRect: watcher.rect,
+            state: watcher.armed ? .armed : .idle
+          )
+        }
+      }
+
+      for watcher in loadedWatchers where watcher.armed {
         await WatcherArmService.arm(watcherID: watcher.id, bus: bus, store: store)
       }
       await MainActor.run { refreshMenu() }

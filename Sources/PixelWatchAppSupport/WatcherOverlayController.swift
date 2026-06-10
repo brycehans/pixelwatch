@@ -47,18 +47,30 @@ public protocol WindowSnapshotProviding: Sendable {
 final class DefaultWatcherOverlaySession: WatcherOverlaySession {
   private let overlay: WatcherOverlayWindow
   private let mouseLocationProvider: () -> CGPoint
+  /// Returns the bounds of the target window NOW. Used to snapshot the anchor
+  /// when freeze() fires, so the controller's `register()` does not re-query
+  /// (possibly catching a moved window).
+  private let boundsProvider: () -> CGRect?
   private(set) var currentFrame: CGRect
   private(set) var frozenRect: CGRect?
+  /// Window bounds at the moment freeze() was called; nil before freeze.
+  private(set) var anchorBounds: CGRect?
 
   private var trackingTimer: Timer?
   private var globalMonitor: Any?
   private var localMonitor: Any?
   private var freezeContinuation: CheckedContinuation<Void, Never>?
 
-  init(overlay: WatcherOverlayWindow, initialFrame: CGRect, mouseLocationProvider: @escaping () -> CGPoint) {
+  init(
+    overlay: WatcherOverlayWindow,
+    initialFrame: CGRect,
+    mouseLocationProvider: @escaping () -> CGPoint,
+    boundsProvider: @escaping () -> CGRect? = { nil }
+  ) {
     self.overlay = overlay
     self.currentFrame = initialFrame
     self.mouseLocationProvider = mouseLocationProvider
+    self.boundsProvider = boundsProvider
   }
 
   /// Start cursor-follow timer and click monitors. Called by the live path only.
@@ -78,6 +90,7 @@ final class DefaultWatcherOverlaySession: WatcherOverlaySession {
   func freeze() {
     guard frozenRect == nil else { return }   // idempotent — multi-click safe
     frozenRect = currentFrame
+    anchorBounds = boundsProvider()
     stopTracking()
     freezeContinuation?.resume()
     freezeContinuation = nil
@@ -288,10 +301,12 @@ public final class WatcherOverlayController {
 
     let sessionID = WatcherID()
     let overlay = overlayFactory(sessionID)
+    let snapshotProvider = windowSnapshotProvider
     let session = DefaultWatcherOverlaySession(
       overlay: overlay,
       initialFrame: initialFrame,
-      mouseLocationProvider: mouseLocationProvider
+      mouseLocationProvider: mouseLocationProvider,
+      boundsProvider: { snapshotProvider.windowSnapshot(windowID: windowID)?.bounds }
     )
 
     overlay.setFrame(initialFrame)
@@ -303,6 +318,53 @@ public final class WatcherOverlayController {
     sessionDidStart(session)
 
     return session
+  }
+
+  /// Restore an overlay for a watcher loaded from disk on app launch.
+  /// `windowRelativeRect` is the persisted `Watcher.rect`. Looks up the
+  /// target window's live bounds and renders the overlay at
+  /// `bounds.origin + windowRelativeRect`. Border colour reflects `state`.
+  /// No-op if the window can't currently be resolved.
+  public func restore(
+    watcherID: WatcherID,
+    windowID: UInt32,
+    windowRelativeRect rect: CGRect,
+    state: WatcherState
+  ) {
+    guard let snapshot = windowSnapshotProvider.windowSnapshot(windowID: windowID) else {
+      return
+    }
+    let overlay = overlayFactory(watcherID)
+    let screenRect = CGRect(
+      x: snapshot.bounds.origin.x + rect.origin.x,
+      y: snapshot.bounds.origin.y + rect.origin.y,
+      width: rect.width,
+      height: rect.height
+    )
+
+    // A frozen-from-the-start session — no cursor tracking, no click monitors.
+    // We still use the session machinery so that the entry shape matches the
+    // in-flight path; sync() doesn't care about the difference.
+    let snapshotProvider = windowSnapshotProvider
+    let session = DefaultWatcherOverlaySession(
+      overlay: overlay,
+      initialFrame: screenRect,
+      mouseLocationProvider: mouseLocationProvider,
+      boundsProvider: { snapshotProvider.windowSnapshot(windowID: windowID)?.bounds }
+    )
+    session.freeze()
+
+    overlay.setFrame(screenRect)
+    overlay.setVisible(true)
+    overlay.setBorderColor(OverlayAppearance.borderColor(for: state))
+
+    entries[watcherID] = OverlayEntry(
+      session: session,
+      overlay: overlay,
+      windowID: windowID,
+      anchorRect: screenRect,
+      anchorBounds: snapshot.bounds
+    )
   }
 
   /// Re-key a previously-begun overlay session to its persisted watcher ID,
@@ -319,7 +381,11 @@ public final class WatcherOverlayController {
     }
     var entry = existing
     entry.anchorRect = entry.session.frozenRect ?? entry.session.currentFrame
-    entry.anchorBounds = windowSnapshotProvider.windowSnapshot(windowID: entry.windowID)?.bounds
+    // anchorBounds was captured by the session at freeze() time. If freeze
+    // hasn't fired yet (e.g. test paths that register without freezing), fall
+    // back to current bounds so sync still has something to translate from.
+    entry.anchorBounds = entry.session.anchorBounds
+      ?? windowSnapshotProvider.windowSnapshot(windowID: entry.windowID)?.bounds
     entries.removeValue(forKey: currentKey)
     entries[watcherID] = entry
   }
