@@ -75,6 +75,9 @@ public final class NewWatcherCoordinator {
 
     let session = overlaySessionFactory.makeSession(window: snapshot)
 
+    // Wait for the user to click and freeze the overlay before showing the sheet.
+    await session.waitForFreeze()
+
     guard let sheetPresenter = configureSheetPresenter else {
       // No sheet configured — used in test paths that only exercise the overlay start.
       return
@@ -89,8 +92,8 @@ public final class NewWatcherCoordinator {
     )
 
     guard let watcher = await sheetPresenter.present(draft: draft, overlay: session) else {
-      // User cancelled.
-      // TODO: cancel the overlay session when cancel-on-dismiss is wired (Task 5).
+      // User cancelled — tear down the overlay session cleanly.
+      session.cancel()
       return
     }
 

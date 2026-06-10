@@ -29,6 +29,33 @@ final class WatcherOverlayControllerTests: XCTestCase {
     session.freeze()
     XCTAssertEqual(session.frozenRect, CGRect(x: 120, y: 80, width: 100, height: 100))
   }
+
+  func testSessionCancelHidesOverlayAndStopsTracking() async {
+    let overlay = RecordingOverlayWindow()
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { CGPoint(x: 220, y: 180) },
+      windowSnapshotProvider: StubWindowSnapshotProvider(
+        snapshots: [
+          WindowSnapshot(
+            windowID: 42,
+            processID: 99,
+            bundleID: "com.example",
+            title: "Editor",
+            bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
+            isVisible: true
+          )
+        ]
+      )
+    )
+
+    let session = controller.begin(windowID: 42)
+    session.cancel()
+
+    // begin() shows the overlay (true), cancel() hides it (false).
+    XCTAssertEqual(overlay.visibleValues, [true, false])
+    XCTAssertNil(session.frozenRect)
+  }
 }
 
 private struct StubWindowSnapshotProvider: WindowSnapshotProviding {

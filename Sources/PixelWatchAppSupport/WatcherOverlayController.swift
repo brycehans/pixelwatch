@@ -14,6 +14,12 @@ public protocol WatcherOverlaySession: AnyObject {
   var frozenRect: CGRect? { get }
   /// Lock the overlay at its current position and record `frozenRect`.
   func freeze()
+  /// Cancel the in-progress session, hide the overlay, and release tracking
+  /// resources. After cancel(), the session is dead — don't call freeze()/frozenRect.
+  func cancel()
+  /// Suspend until the user freezes the overlay (clicks to pick a rect).
+  /// Returns immediately if already frozen.
+  func waitForFreeze() async
 }
 
 /// An overlay window that the controller drives.
@@ -35,28 +41,80 @@ public protocol WindowSnapshotProviding: Sendable {
 // MARK: - Session implementation
 
 /// Backs a WatcherOverlaySession. Lives on the main actor with the controller.
-private final class DefaultWatcherOverlaySession: WatcherOverlaySession {
+/// Internal (not private) so the controller's live convenience init can reference
+/// the concrete type in its sessionDidStart hook.
+@MainActor
+final class DefaultWatcherOverlaySession: WatcherOverlaySession {
   private let overlay: WatcherOverlayWindow
-  // NOTE: currentFrame is updated by cursor-tracking — not wired in this task.
-  // The live NSPanel overlay will mutate this via its mouse-move handler.
-  private var currentFrame: CGRect
+  private let mouseLocationProvider: () -> CGPoint
+  private(set) var currentFrame: CGRect
   private(set) var frozenRect: CGRect?
 
-  init(overlay: WatcherOverlayWindow, initialFrame: CGRect) {
+  private var trackingTimer: Timer?
+  private var globalMonitor: Any?
+  private var localMonitor: Any?
+  private var freezeContinuation: CheckedContinuation<Void, Never>?
+
+  init(overlay: WatcherOverlayWindow, initialFrame: CGRect, mouseLocationProvider: @escaping () -> CGPoint) {
     self.overlay = overlay
     self.currentFrame = initialFrame
+    self.mouseLocationProvider = mouseLocationProvider
+  }
+
+  /// Start cursor-follow timer and click monitors. Called by the live path only.
+  func startTracking() {
+    trackingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.tick() }
+    }
+    globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
+      MainActor.assumeIsolated { self?.freeze() }
+    }
+    localMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+      MainActor.assumeIsolated { self?.freeze() }
+      return event
+    }
   }
 
   func freeze() {
+    guard frozenRect == nil else { return }   // idempotent — multi-click safe
     frozenRect = currentFrame
+    stopTracking()
+    freezeContinuation?.resume()
+    freezeContinuation = nil
+  }
+
+  func cancel() {
+    stopTracking()
+    overlay.setVisible(false)
+    freezeContinuation?.resume()   // unblock any awaiter; callers should check frozenRect
+    freezeContinuation = nil
+  }
+
+  func waitForFreeze() async {
+    if frozenRect != nil { return }
+    await withCheckedContinuation { continuation in
+      freezeContinuation = continuation
+    }
+  }
+
+  private func tick() {
+    let mouse = mouseLocationProvider()
+    let frame = CGRect(x: mouse.x - 100, y: mouse.y - 100, width: 100, height: 100)
+    currentFrame = frame
+    overlay.setFrame(frame)
+  }
+
+  private func stopTracking() {
+    trackingTimer?.invalidate()
+    trackingTimer = nil
+    if let g = globalMonitor { NSEvent.removeMonitor(g); globalMonitor = nil }
+    if let l = localMonitor { NSEvent.removeMonitor(l); localMonitor = nil }
   }
 }
 
 // MARK: - Live NSPanel overlay
 
 /// A borderless, floating NSPanel that implements WatcherOverlayWindow.
-/// Cursor-follow polling and click-to-freeze are wired by the AppKit shell
-/// via sync() — not implemented in this task.
 private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlayWindow {
   override init(
     contentRect: NSRect,
@@ -116,6 +174,11 @@ public final class WatcherOverlayController {
   private let overlayFactory: (WatcherID) -> WatcherOverlayWindow
   private let mouseLocationProvider: () -> CGPoint
   private let windowSnapshotProvider: any WindowSnapshotProviding
+  /// Optional hook called after a session is created. The live path passes
+  /// a closure that calls `startTracking()` on the concrete session to opt into
+  /// cursor-follow + click monitors. Test paths omit this so no real NSEvent
+  /// monitors are installed.
+  private let sessionDidStart: @MainActor (any WatcherOverlaySession) -> Void
 
   private struct OverlayEntry {
     let session: DefaultWatcherOverlaySession
@@ -130,11 +193,13 @@ public final class WatcherOverlayController {
   public init(
     overlayFactory: @escaping (WatcherID) -> WatcherOverlayWindow,
     mouseLocationProvider: @escaping () -> CGPoint,
-    windowSnapshotProvider: some WindowSnapshotProviding
+    windowSnapshotProvider: some WindowSnapshotProviding,
+    sessionDidStart: @escaping @MainActor (any WatcherOverlaySession) -> Void = { _ in }
   ) {
     self.overlayFactory = overlayFactory
     self.mouseLocationProvider = mouseLocationProvider
     self.windowSnapshotProvider = windowSnapshotProvider
+    self.sessionDidStart = sessionDidStart
   }
 
   /// Convenience init that wires up live AppKit dependencies.
@@ -159,7 +224,10 @@ public final class WatcherOverlayController {
         let screenHeight = NSScreen.main?.frame.height ?? 0
         return CGPoint(x: e.x, y: screenHeight - e.y)
       },
-      windowSnapshotProvider: CGWindowSnapshotProvider()
+      windowSnapshotProvider: CGWindowSnapshotProvider(),
+      sessionDidStart: { session in
+        (session as? DefaultWatcherOverlaySession)?.startTracking()
+      }
     )
   }
 
@@ -186,13 +254,19 @@ public final class WatcherOverlayController {
 
     let sessionID = WatcherID()
     let overlay = overlayFactory(sessionID)
-    let session = DefaultWatcherOverlaySession(overlay: overlay, initialFrame: initialFrame)
+    let session = DefaultWatcherOverlaySession(
+      overlay: overlay,
+      initialFrame: initialFrame,
+      mouseLocationProvider: mouseLocationProvider
+    )
 
     overlay.setFrame(initialFrame)
     overlay.setVisible(true)
     overlay.setBorderColor(OverlayAppearance.borderColor(for: .idle))
 
     entries[sessionID] = OverlayEntry(session: session, overlay: overlay, windowID: windowID)
+
+    sessionDidStart(session)
 
     return session
   }
@@ -218,8 +292,6 @@ public final class WatcherOverlayController {
   }
 
   /// Refresh overlay position and visibility against current window geometry.
-  /// TODO: live polling is wired by the live NSPanel — sync() is the public hook
-  /// for the AppKit shell to drive per-display-link tick or timer tick.
   public func sync() {
     for (_, entry) in entries {
       guard let snapshot = windowSnapshotProvider.windowSnapshot(windowID: entry.windowID) else {
@@ -237,6 +309,8 @@ public final class WatcherOverlayController {
 private final class NoOpWatcherOverlaySession: WatcherOverlaySession {
   private(set) var frozenRect: CGRect? = nil
   func freeze() {}
+  func cancel() {}
+  func waitForFreeze() async {}
 }
 
 // MARK: - Live WindowSnapshotProviding
