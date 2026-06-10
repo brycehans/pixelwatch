@@ -15,6 +15,10 @@ public struct HookResult: Equatable, Sendable {
   }
 }
 
+public protocol HookRunning: Sendable {
+  func run(command: String, env: [String: String], timeout: TimeInterval) async -> HookResult
+}
+
 public enum HookRunner {
   public static func run(
     command: String,
@@ -152,6 +156,14 @@ public enum HookRunner {
 
   private static func waitStatus(_ status: Int32) -> Int32 {
     status & 0x7f
+  }
+}
+
+public struct LiveHookRunner: HookRunning {
+  public init() {}
+
+  public func run(command: String, env: [String: String], timeout: TimeInterval) async -> HookResult {
+    await HookRunner.run(command: command, env: env, timeout: timeout)
   }
 }
 
