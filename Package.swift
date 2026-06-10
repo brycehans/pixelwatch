@@ -9,10 +9,5 @@ let package = Package(
       name: "pixelwatch-bench",
       path: "Sources/pixelwatch-bench"
     ),
-    .testTarget(
-      name: "pixelwatch-benchTests",
-      dependencies: ["pixelwatch-bench"],
-      path: "Tests/pixelwatch-benchTests"
-    ),
   ]
 )
