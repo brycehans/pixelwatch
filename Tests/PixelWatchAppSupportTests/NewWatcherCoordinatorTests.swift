@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class NewWatcherCoordinatorTests: XCTestCase {
+
+  // The persisted Watcher.rect is window-relative (Capture.crop expects it that
+  // way). The overlay's frozenRect is in screen coords. windowRelativeRect()
+  // does the subtraction at the save boundary.
+  func testWindowRelativeRectSubtractsWindowOrigin() {
+    let screenRect = CGRect(x: 250, y: 380, width: 100, height: 100)
+    let windowBounds = CGRect(x: 200, y: 300, width: 800, height: 600)
+    XCTAssertEqual(
+      windowRelativeRect(fromScreen: screenRect, windowBounds: windowBounds),
+      CGRect(x: 50, y: 80, width: 100, height: 100)
+    )
+  }
+
+  func testWindowRelativeRectAtWindowOriginIsZero() {
+    let bounds = CGRect(x: 200, y: 300, width: 800, height: 600)
+    XCTAssertEqual(
+      windowRelativeRect(fromScreen: bounds, windowBounds: bounds),
+      CGRect(x: 0, y: 0, width: 800, height: 600)
+    )
+  }
+
   func testNoFocusedWindowShowsAlertAndStops() async {
     let alert = RecordingAlertPresenter()
     let overlay = RecordingOverlaySessionFactory()

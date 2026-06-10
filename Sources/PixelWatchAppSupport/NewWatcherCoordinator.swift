@@ -19,6 +19,20 @@ public protocol ConfigureWatcherSheetPresenting: Sendable {
   func present(draft: WatcherDraft, overlay: any WatcherOverlaySession) async -> Watcher?
 }
 
+// MARK: - Coord conversion for persistence
+
+/// Converts a screen-coord rect (the overlay's frozen position) into the
+/// window-relative coord system used by `Watcher.rect` and `Capture.crop`.
+/// Both inputs must use the same origin convention (top-left for CGWindowList).
+public func windowRelativeRect(fromScreen rect: CGRect, windowBounds: CGRect) -> CGRect {
+  CGRect(
+    x: rect.origin.x - windowBounds.origin.x,
+    y: rect.origin.y - windowBounds.origin.y,
+    width: rect.width,
+    height: rect.height
+  )
+}
+
 // MARK: - WatcherDraft
 
 public struct WatcherDraft: Sendable {

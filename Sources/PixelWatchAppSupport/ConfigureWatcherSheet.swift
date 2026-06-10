@@ -96,7 +96,9 @@ public final class AppKitConfigureWatcherSheetPresenter: ConfigureWatcherSheetPr
         resumed = true
         panel?.close()
 
-        let rect = overlay.frozenRect ?? CGRect(x: 0, y: 0, width: 100, height: 100)
+        // frozenRect is in screen coords; persistence + Capture want window-relative.
+        let screenRect = overlay.frozenRect ?? CGRect(x: 0, y: 0, width: 100, height: 100)
+        let rect = windowRelativeRect(fromScreen: screenRect, windowBounds: draft.window.bounds)
         let target = WindowBinding(
           bundleID: draft.window.bundleID,
           titleMatch: .exact(draft.window.title),
