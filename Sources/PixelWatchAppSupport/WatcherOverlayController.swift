@@ -208,6 +208,12 @@ public final class WatcherOverlayController {
     let session: DefaultWatcherOverlaySession
     let overlay: WatcherOverlayWindow
     var windowID: UInt32
+    /// Overlay frame on screen when `register` was called (top-left origin).
+    /// Used as the base of the delta translation in `sync()`.
+    var anchorRect: CGRect?
+    /// Window bounds at the moment `anchorRect` was captured. The delta
+    /// between current bounds and these gives the translation to apply.
+    var anchorBounds: CGRect?
   }
 
   private var entries: [WatcherID: OverlayEntry] = [:]
@@ -302,12 +308,18 @@ public final class WatcherOverlayController {
   /// Re-key a previously-begun overlay session to its persisted watcher ID,
   /// so `update(watcherID:state:)` and `sync()` can find it. Call this once,
   /// after the user saves the configure sheet and the watcher is persisted.
+  ///
+  /// Captures the overlay's current frame and the target window's bounds so
+  /// `sync()` can translate the overlay when the window moves.
   public func register(watcherID: WatcherID, for session: any WatcherOverlaySession) {
     // Identify by reference — the entry was inserted with the same session instance.
-    guard let (currentKey, entry) = entries.first(where: { $0.value.session === session }) else {
+    guard let (currentKey, existing) = entries.first(where: { $0.value.session === session }) else {
       assertionFailure("WatcherOverlayController.register: session not found")
       return
     }
+    var entry = existing
+    entry.anchorRect = entry.session.frozenRect ?? entry.session.currentFrame
+    entry.anchorBounds = windowSnapshotProvider.windowSnapshot(windowID: entry.windowID)?.bounds
     entries.removeValue(forKey: currentKey)
     entries[watcherID] = entry
   }
@@ -322,12 +334,20 @@ public final class WatcherOverlayController {
   /// Refresh overlay position and visibility against current window geometry.
   /// An overlay is visible only when its target window is on-screen AND the
   /// target's app is the frontmost app. Cmd+Tab away → hide; Cmd+Tab back → show.
+  /// Registered overlays also follow their target window when it's dragged:
+  /// the translation between the current bounds and `anchorBounds` is applied
+  /// to `anchorRect` to produce the on-screen frame.
   public func sync() {
     let frontmostPID = frontmostProcessIDProvider()
     for (_, entry) in entries {
       guard let snapshot = windowSnapshotProvider.windowSnapshot(windowID: entry.windowID) else {
         entry.overlay.setVisible(false)
         continue
+      }
+      if let anchorRect = entry.anchorRect, let anchorBounds = entry.anchorBounds {
+        let dx = snapshot.bounds.origin.x - anchorBounds.origin.x
+        let dy = snapshot.bounds.origin.y - anchorBounds.origin.y
+        entry.overlay.setFrame(anchorRect.offsetBy(dx: dx, dy: dy))
       }
       let isFrontmost = (snapshot.processID == frontmostPID)
       entry.overlay.setVisible(snapshot.isVisible && isFrontmost)

@@ -85,6 +85,63 @@ final class WatcherOverlayControllerTests: XCTestCase {
     XCTAssertEqual(twice, original)
   }
 
+  func testSyncTranslatesOverlayWhenTargetWindowMoves() {
+    let overlay = RecordingOverlayWindow()
+    let provider = MutableWindowSnapshotProvider()
+    provider.set(
+      WindowSnapshot(
+        windowID: 42,
+        processID: 99,
+        bundleID: "com.example",
+        title: "Editor",
+        bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
+        isVisible: true
+      )
+    )
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { CGPoint(x: 220, y: 180) },
+      windowSnapshotProvider: provider,
+      frontmostProcessIDProvider: { 99 }
+    )
+
+    let session = controller.begin(windowID: 42)
+    // begin sets initial frame at cursor-100,-100 → (120, 80, 100, 100).
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 120, y: 80, width: 100, height: 100))
+
+    session.freeze()
+    let watcherID = UUID()
+    controller.register(watcherID: watcherID, for: session)
+
+    // Window moves by (+50, +30).
+    provider.set(
+      WindowSnapshot(
+        windowID: 42,
+        processID: 99,
+        bundleID: "com.example",
+        title: "Editor",
+        bounds: CGRect(x: 150, y: 130, width: 500, height: 400),
+        isVisible: true
+      )
+    )
+    controller.sync()
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 170, y: 110, width: 100, height: 100))
+
+    // Window moves the other way: net delta from anchor is (-30, -20).
+    provider.set(
+      WindowSnapshot(
+        windowID: 42,
+        processID: 99,
+        bundleID: "com.example",
+        title: "Editor",
+        bounds: CGRect(x: 70, y: 80, width: 500, height: 400),
+        isVisible: true
+      )
+    )
+    controller.sync()
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 90, y: 60, width: 100, height: 100))
+  }
+
   func testSessionCancelHidesOverlayAndStopsTracking() async {
     let overlay = RecordingOverlayWindow()
     let controller = WatcherOverlayController(
@@ -118,6 +175,19 @@ private struct StubWindowSnapshotProvider: WindowSnapshotProviding {
 
   func windowSnapshot(windowID: UInt32) -> WindowSnapshot? {
     snapshots.first { $0.windowID == windowID }
+  }
+}
+
+/// A snapshot provider whose backing snapshot can be replaced between calls.
+/// Tests use it to simulate the target window moving on screen.
+private final class MutableWindowSnapshotProvider: WindowSnapshotProviding, @unchecked Sendable {
+  private var snapshot: WindowSnapshot?
+
+  func set(_ snapshot: WindowSnapshot) { self.snapshot = snapshot }
+
+  func windowSnapshot(windowID: UInt32) -> WindowSnapshot? {
+    guard let s = snapshot, s.windowID == windowID else { return nil }
+    return s
   }
 }
 
