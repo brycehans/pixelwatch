@@ -71,7 +71,9 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
 
     // Start the debug socket unconditionally.
     // TODO: Replace with a Settings toggle before shipping — this should be off by default.
-    let socket = DebugSocket(bus: bus)
+    let socket = DebugSocket(bus: bus, commandHandler: { [weak self] cmd in
+      Task { @MainActor [weak self] in self?.handle(command: cmd) }
+    })
     self.debugSocket = socket
     Task {
       do {
@@ -99,6 +101,17 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
 
   @objc private func newWatcherClicked(_: AnyObject?) {
     Task { await coordinator.startNewWatcher() }
+  }
+
+  /// Dispatches a DebugSocket command to its UI side-effect. Runs on the main actor
+  /// because `coordinator.startNewWatcher()` and `NSApp.terminate` both require it.
+  private func handle(command: DebugCommand) {
+    switch command {
+    case .newWatcher:
+      newWatcherClicked(nil)
+    case .quit:
+      NSApp.terminate(nil)
+    }
   }
 
   private func handleWatcherCreated(_ watcher: Watcher, session: any WatcherOverlaySession) {

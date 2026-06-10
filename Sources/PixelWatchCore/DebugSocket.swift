@@ -15,6 +15,20 @@ public enum DebugSocketError: Error {
   case listenFailed(errno: Int32)
 }
 
+// MARK: - Commands sent in from socket clients
+
+/// Imperative commands a socket client can send to drive the running app.
+/// Wire format is `{"cmd":"<case>"}` per line.
+public enum DebugCommand: String, Codable, Sendable, Equatable {
+  case newWatcher
+  case quit
+}
+
+/// Internal envelope used to decode `{"cmd":"<case>"}` lines.
+private struct DebugCommandEnvelope: Decodable {
+  let cmd: DebugCommand
+}
+
 // MARK: - Per-client state (not an actor; only touched from inside the DebugSocket actor)
 
 private final class ClientConnection: @unchecked Sendable {
@@ -38,9 +52,14 @@ public actor DebugSocket {
       .appendingPathComponent("Library/Application Support/PixelWatch/bus.sock")
   }
 
-  public init(bus: EventBus, path: URL = DebugSocket.defaultPath()) {
+  public init(
+    bus: EventBus,
+    path: URL = DebugSocket.defaultPath(),
+    commandHandler: @Sendable @escaping (DebugCommand) -> Void = { _ in }
+  ) {
     self.bus = bus
     self.path = path
+    self.commandHandler = commandHandler
   }
 
   // Starts the unix-domain listener and the bus-fanout task.
@@ -140,6 +159,7 @@ public actor DebugSocket {
 
   private let bus: EventBus
   private let path: URL
+  private let commandHandler: @Sendable (DebugCommand) -> Void
   private var serverFD: Int32 = -1
   private var acceptThread: Thread?
   private var clients: [Int32: ClientConnection] = [:]
@@ -167,6 +187,7 @@ public actor DebugSocket {
     // Capture weak refs / value copies to avoid actor re-entrancy in the thread body.
     let busRef = bus
     let decoderRef = decoder
+    let commandHandlerRef = commandHandler
 
     let thread = Thread {
       var buffer = Data()
@@ -185,10 +206,15 @@ public actor DebugSocket {
           if lineData.isEmpty { continue }
 
           // Decode on the thread, then publish via Task hop.
-          if let event = try? decoderRef.decode(PixelWatchEvent.self, from: Data(lineData)) {
+          // Try PixelWatchEvent first (the "publish onto the bus" path);
+          // fall back to DebugCommand for imperative client → app commands.
+          let payload = Data(lineData)
+          if let event = try? decoderRef.decode(PixelWatchEvent.self, from: payload) {
             Task { await busRef.publish(event) }
+          } else if let envelope = try? decoderRef.decode(DebugCommandEnvelope.self, from: payload) {
+            commandHandlerRef(envelope.cmd)
           } else {
-            let msg = "[DebugSocket] could not decode line: \(String(data: Data(lineData), encoding: .utf8) ?? "<non-UTF8>")\n"
+            let msg = "[DebugSocket] could not decode line: \(String(data: payload, encoding: .utf8) ?? "<non-UTF8>")\n"
             if let d = msg.data(using: .utf8) {
               FileHandle.standardError.write(d)
             }

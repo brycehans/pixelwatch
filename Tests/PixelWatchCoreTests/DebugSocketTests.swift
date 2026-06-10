@@ -101,6 +101,90 @@ final class DebugSocketTests: XCTestCase {
     XCTAssertNotNil(received, "Expected to observe injected .paused event on the bus")
   }
 
+  // Sends {"cmd":"newWatcher"} over the socket and expects the registered
+  // command handler to fire with .newWatcher.
+  func testDispatchesNewWatcherCommandToHandler() async throws {
+    try await runCommandDispatch(
+      json: "{\"cmd\":\"newWatcher\"}",
+      expected: .newWatcher
+    )
+  }
+
+  // Sends {"cmd":"quit"} over the socket and expects the registered command
+  // handler to fire with .quit.
+  func testDispatchesQuitCommandToHandler() async throws {
+    try await runCommandDispatch(
+      json: "{\"cmd\":\"quit\"}",
+      expected: .quit
+    )
+  }
+
+  /// Shared body of the per-command dispatch tests. Connects a raw socket,
+  /// writes the JSONL payload, and asserts the captured handler invocation.
+  private func runCommandDispatch(
+    json: String,
+    expected: DebugCommand
+  ) async throws {
+    let tmpPath = URL(fileURLWithPath: "/tmp/pw-\(UUID().uuidString.prefix(8)).sock")
+    defer { try? FileManager.default.removeItem(at: tmpPath) }
+
+    let bus = EventBus()
+    let received = CommandCapture()
+    let socket = DebugSocket(
+      bus: bus,
+      path: tmpPath,
+      commandHandler: { cmd in Task { await received.add(cmd) } }
+    )
+    try await socket.start()
+    defer { Task { await socket.stop() } }
+
+    try await Task.sleep(nanoseconds: 50_000_000)
+
+    let clientFD = try connectClient(to: tmpPath)
+    defer { Darwin.close(clientFD) }
+    try await Task.sleep(nanoseconds: 50_000_000)
+
+    let line = json + "\n"
+    let writeResult = line.withCString { ptr in
+      Darwin.write(clientFD, ptr, strlen(ptr))
+    }
+    XCTAssertGreaterThan(writeResult, 0, "write() to socket failed: errno=\(errno)")
+
+    await waitUntil(timeoutNanoseconds: 2_000_000_000) {
+      await received.count > 0
+    }
+    let observed = await received.all
+    XCTAssertEqual(observed, [expected])
+  }
+
+  /// Connects a raw POSIX unix-domain client socket to `path`. Returns the fd.
+  private func connectClient(to path: URL) throws -> Int32 {
+    let clientFD = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+    XCTAssertGreaterThanOrEqual(clientFD, 0, "Failed to create client socket")
+
+    var one: Int32 = 1
+    setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
+
+    var addr = sockaddr_un()
+    addr.sun_family = sa_family_t(AF_UNIX)
+    let pathBytes = path.path.utf8CString
+    let sunPathCapacity = MemoryLayout.size(ofValue: addr.sun_path)
+    withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+      ptr.withMemoryRebound(to: CChar.self, capacity: sunPathCapacity) { dst in
+        _ = pathBytes.withUnsafeBufferPointer { src in
+          memcpy(dst, src.baseAddress!, src.count)
+        }
+      }
+    }
+    let connectResult = withUnsafePointer(to: &addr) { ptr in
+      ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+        Darwin.connect(clientFD, sa, socklen_t(MemoryLayout<sockaddr_un>.size))
+      }
+    }
+    XCTAssertEqual(connectResult, 0, "connect() failed: errno=\(errno)")
+    return clientFD
+  }
+
   // MARK: - Helpers
 
   /// Reads from `fd` in non-blocking mode (polling with Task.sleep) until a newline is found
@@ -132,4 +216,12 @@ final class DebugSocketTests: XCTestCase {
     XCTFail("Timed out waiting for a JSONL line from the socket")
     return ""
   }
+}
+
+/// Captures DebugCommand invocations from the socket's command handler so a
+/// test can assert on what was dispatched.
+private actor CommandCapture {
+  private(set) var all: [DebugCommand] = []
+  var count: Int { all.count }
+  func add(_ cmd: DebugCommand) { all.append(cmd) }
 }
