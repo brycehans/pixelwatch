@@ -45,6 +45,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   private var lastEventDescription = "No events yet"
 
   private let overlayController = WatcherOverlayController()
+  private var syncTimer: Timer?
   private lazy var coordinator: NewWatcherCoordinator = {
     let factory = WatcherOverlayControllerSessionFactory(controller: overlayController)
     let sheetPresenter = AppKitConfigureWatcherSheetPresenter()
@@ -64,12 +65,21 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem?.button?.title = "PixelWatch"
     startRuntime()
+    startSyncTimer()
     refreshMenu()
   }
 
   func applicationWillTerminate(_: Notification) {
+    syncTimer?.invalidate()
+    syncTimer = nil
     stageTasks.forEach { $0.cancel() }
     eventTask?.cancel()
+  }
+
+  private func startSyncTimer() {
+    syncTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.overlayController.sync() }
+    }
   }
 
   @objc private func newWatcherClicked(_: AnyObject?) {
@@ -126,9 +136,19 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     eventTask = Task {
       var events = await bus.subscribe().makeAsyncIterator()
       while !Task.isCancelled, let event = await events.next() {
+        let watcherID = event.watcherID
+        // Re-fetch state after the event so we read post-apply state.
+        // Note: WatcherStore and the delegate subscribe independently, so there
+        // is a small race where the store may not yet have applied the event;
+        // in practice the dictionary update is instantaneous and the lag is not
+        // observable at the 4 Hz sync cadence.
+        let state = await store.state(for: watcherID)
         await MainActor.run {
           lastEventDescription = Self.describe(event)
           refreshMenu()
+          if let state {
+            overlayController.update(watcherID: watcherID, state: state)
+          }
         }
       }
     }

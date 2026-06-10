@@ -80,7 +80,7 @@ public final class AppKitConfigureWatcherSheetPresenter: ConfigureWatcherSheetPr
   ) async -> Watcher? {
     await withCheckedContinuation { continuation in
       let panel = NSPanel(
-        contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
         styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
         backing: .buffered,
         defer: false
