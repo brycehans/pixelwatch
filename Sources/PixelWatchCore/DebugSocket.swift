@@ -231,10 +231,12 @@ public actor DebugSocket {
   }
 
   // Send an event to all connected clients as a JSONL line.
+  // Pixel buffers are stripped to {width, height, linearRGB:""} before encoding —
+  // raw frame data is far too large to fan out over the socket at capture frequency.
   private func broadcast(_ event: PixelWatchEvent) {
     guard !clients.isEmpty else { return }
     guard
-      let data = try? encoder.encode(event),
+      let data = try? encoder.encode(event.strippedForBroadcast),
       var line = String(data: data, encoding: .utf8)
     else { return }
     line += "\n"
@@ -260,4 +262,30 @@ public actor DebugSocket {
       Darwin.close(fd)
     }
   }
+}
+
+// MARK: - Broadcast-safe event stripping
+
+private extension PixelWatchEvent {
+  /// Returns the event with all PixelBuffer payloads replaced by empty stubs
+  /// (width/height preserved, linearRGB empty). Keeps wire size tiny while
+  /// still letting clients see frame dimensions and diff scores.
+  var strippedForBroadcast: PixelWatchEvent {
+    switch self {
+    case let .armed(watcherID, baseline):
+      return .armed(watcherID: watcherID, baseline: baseline.stub)
+    case let .frameCaptured(watcherID, frame, at):
+      return .frameCaptured(watcherID: watcherID, frame: frame.stub, at: at)
+    case let .diffComputed(watcherID, score, frame):
+      return .diffComputed(watcherID: watcherID, score: score, frame: frame.stub)
+    case let .thresholdExceeded(watcherID, score, frame):
+      return .thresholdExceeded(watcherID: watcherID, score: score, frame: frame.stub)
+    case .windowVanished, .hookStarted, .hookFinished, .paused, .errored:
+      return self
+    }
+  }
+}
+
+private extension PixelBuffer {
+  var stub: PixelBuffer { PixelBuffer(width: width, height: height, linearRGB: []) }
 }
