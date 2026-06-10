@@ -6,6 +6,7 @@ let package = Package(
   platforms: [.macOS(.v15)],
   products: [
     .library(name: "PixelWatchCore", targets: ["PixelWatchCore"]),
+    .library(name: "PixelWatchAppSupport", targets: ["PixelWatchAppSupport"]),
     .executable(name: "pixelwatch", targets: ["pixelwatch"]),
     .executable(name: "pixelwatch-bench", targets: ["pixelwatch-bench"]),
   ],
@@ -14,9 +15,14 @@ let package = Package(
       name: "PixelWatchCore",
       path: "Sources/PixelWatchCore"
     ),
+    .target(
+      name: "PixelWatchAppSupport",
+      dependencies: ["PixelWatchCore"],
+      path: "Sources/PixelWatchAppSupport"
+    ),
     .executableTarget(
       name: "pixelwatch",
-      dependencies: ["PixelWatchCore"],
+      dependencies: ["PixelWatchCore", "PixelWatchAppSupport"],
       path: "Sources/pixelwatch"
     ),
     .executableTarget(
@@ -27,6 +33,11 @@ let package = Package(
       name: "PixelWatchCoreTests",
       dependencies: ["PixelWatchCore"],
       path: "Tests/PixelWatchCoreTests"
+    ),
+    .testTarget(
+      name: "PixelWatchAppSupportTests",
+      dependencies: ["PixelWatchAppSupport"],
+      path: "Tests/PixelWatchAppSupportTests"
     ),
   ]
 )
