@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import PixelWatchAppSupport
 import PixelWatchCore
 
 @main
@@ -18,6 +19,20 @@ enum PixelWatchMain {
   }
 }
 
+// MARK: - NSAlert-backed alert presenter
+
+private struct NSAlertPresenter: AlertPresenting {
+  @MainActor
+  func show(message: String) {
+    let alert = NSAlert()
+    alert.messageText = message
+    alert.alertStyle = .informational
+    alert.runModal()
+  }
+}
+
+// MARK: - App delegate
+
 @MainActor
 private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   private let bus = EventBus()
@@ -29,6 +44,22 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   private var statusItem: NSStatusItem?
   private var lastEventDescription = "No events yet"
 
+  private let overlayController = WatcherOverlayController()
+  private lazy var coordinator: NewWatcherCoordinator = {
+    let factory = WatcherOverlayControllerSessionFactory(controller: overlayController)
+    let sheetPresenter = AppKitConfigureWatcherSheetPresenter()
+    return NewWatcherCoordinator(
+      focusedWindowProvider: CGFocusedWindowProvider(),
+      alertPresenter: NSAlertPresenter(),
+      overlaySessionFactory: factory,
+      configureSheetPresenter: sheetPresenter,
+      onWatcherCreated: { [weak self] watcher, session in
+        guard let self else { return }
+        self.handleWatcherCreated(watcher, session: session)
+      }
+    )
+  }()
+
   func applicationDidFinishLaunching(_: Notification) {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem?.button?.title = "PixelWatch"
@@ -39,6 +70,28 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   func applicationWillTerminate(_: Notification) {
     stageTasks.forEach { $0.cancel() }
     eventTask?.cancel()
+  }
+
+  @objc private func newWatcherClicked(_: AnyObject?) {
+    Task { await coordinator.startNewWatcher() }
+  }
+
+  private func handleWatcherCreated(_ watcher: Watcher, session: any WatcherOverlaySession) {
+    watchers.append(watcher)
+    do {
+      try persistence.save(watchers)
+    } catch {
+      lastEventDescription = "Failed to save watcher: \(error)"
+    }
+
+    Task {
+      await store.add(watcher)
+      if watcher.armed {
+        await WatcherArmService.arm(watcherID: watcher.id, bus: bus, store: store)
+      }
+      overlayController.register(watcherID: watcher.id, for: session)
+      await MainActor.run { refreshMenu() }
+    }
   }
 
   private func startRuntime() {
@@ -86,10 +139,26 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     let title = NSMenuItem(title: "PixelWatch", action: nil, keyEquivalent: "")
     title.isEnabled = false
     menu.addItem(title)
-    menu.addItem(NSMenuItem(title: "\(watchers.count) watcher\(watchers.count == 1 ? "" : "s") loaded", action: nil, keyEquivalent: ""))
+    menu.addItem(NSMenuItem(
+      title: "\(watchers.count) watcher\(watchers.count == 1 ? "" : "s") loaded",
+      action: nil,
+      keyEquivalent: ""
+    ))
     menu.addItem(NSMenuItem(title: lastEventDescription, action: nil, keyEquivalent: ""))
     menu.addItem(.separator())
-    menu.addItem(NSMenuItem(title: "Quit PixelWatch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    let newWatcher = NSMenuItem(
+      title: "+ New watcher",
+      action: #selector(newWatcherClicked(_:)),
+      keyEquivalent: "n"
+    )
+    newWatcher.target = self
+    menu.addItem(newWatcher)
+    menu.addItem(.separator())
+    menu.addItem(NSMenuItem(
+      title: "Quit PixelWatch",
+      action: #selector(NSApplication.terminate(_:)),
+      keyEquivalent: "q"
+    ))
     statusItem?.menu = menu
   }
 
