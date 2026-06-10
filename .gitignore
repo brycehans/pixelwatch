@@ -4,3 +4,4 @@
 bench-*.json
 docs/mem-proposals/
 .DS_Store
+tmp/
