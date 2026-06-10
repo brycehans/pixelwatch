@@ -46,6 +46,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
 
   private let overlayController = WatcherOverlayController()
   private var syncTimer: Timer?
+  private var debugSocket: DebugSocket?
   private lazy var coordinator: NewWatcherCoordinator = {
     let factory = WatcherOverlayControllerSessionFactory(controller: overlayController)
     let sheetPresenter = AppKitConfigureWatcherSheetPresenter()
@@ -67,6 +68,19 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     startRuntime()
     startSyncTimer()
     refreshMenu()
+
+    // Start the debug socket unconditionally.
+    // TODO: Replace with a Settings toggle before shipping — this should be off by default.
+    let socket = DebugSocket(bus: bus)
+    self.debugSocket = socket
+    Task {
+      do {
+        try await socket.start()
+        NSLog("DebugSocket listening at %@", DebugSocket.defaultPath().path)
+      } catch {
+        NSLog("DebugSocket failed to start: %@", error.localizedDescription)
+      }
+    }
   }
 
   func applicationWillTerminate(_: Notification) {
@@ -74,6 +88,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     syncTimer = nil
     stageTasks.forEach { $0.cancel() }
     eventTask?.cancel()
+    Task { await debugSocket?.stop() }
   }
 
   private func startSyncTimer() {

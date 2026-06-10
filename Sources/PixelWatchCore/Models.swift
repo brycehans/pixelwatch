@@ -66,12 +66,12 @@ public enum WatcherState: Codable, Equatable, Sendable {
   case errored(String)
 }
 
-public enum VanishReason: Codable, Equatable, Sendable {
+public enum VanishReason: String, Codable, Equatable, Sendable {
   case windowClosed
   case appQuit
 }
 
-public enum FireReason: Codable, Equatable, Sendable {
+public enum FireReason: String, Codable, Equatable, Sendable {
   case pixelChange
   case windowVanished
   case appQuit
@@ -79,7 +79,7 @@ public enum FireReason: Codable, Equatable, Sendable {
   case testHook
 }
 
-public enum PauseReason: Codable, Equatable, Sendable {
+public enum PauseReason: String, Codable, Equatable, Sendable {
   case userPaused
 }
 
