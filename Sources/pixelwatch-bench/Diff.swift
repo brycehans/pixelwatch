@@ -31,16 +31,23 @@ enum Diff {
     ctx.draw(image, in: CGRect(x: 0, y: 0, width: dstW, height: dstH))
 
     // 3. Convert sRGB-encoded UInt8 → linear-RGB Float per channel.
-    //    Uses fast gamma-2.2 approximation per the design.
-    var linear = [Float](repeating: 0, count: dstW * dstH * 3)
-    for p in 0..<(dstW * dstH) {
-      let r = Float(rgba[p*4 + 0]) / 255
-      let g = Float(rgba[p*4 + 1]) / 255
-      let b = Float(rgba[p*4 + 2]) / 255
-      linear[p*3 + 0] = pow(r, 2.2)
-      linear[p*3 + 1] = pow(g, 2.2)
-      linear[p*3 + 2] = pow(b, 2.2)
+    //    Strip the alpha and normalise into an interleaved RGB Float buffer.
+    //    This unpacking step is memory-bound, so left scalar for readability.
+    let pixelCount = dstW * dstH
+    var rgbNormalised = [Float](repeating: 0, count: pixelCount * 3)
+    for p in 0..<pixelCount {
+      rgbNormalised[p*3 + 0] = Float(rgba[p*4 + 0]) / 255
+      rgbNormalised[p*3 + 1] = Float(rgba[p*4 + 1]) / 255
+      rgbNormalised[p*3 + 2] = Float(rgba[p*4 + 2]) / 255
     }
+    // Apply gamma 2.2 to all channels in one vectorised pass via vForce.
+    // Gamma 2.2 is an approximation of the sRGB EOTF (which is piecewise near 0).
+    // Safe here because we only compare deltas between buffers — the same
+    // nonlinearity is applied to both baseline and current.
+    var linear = [Float](repeating: 0, count: pixelCount * 3)
+    var exponent: Float = 2.2
+    var count = Int32(pixelCount * 3)
+    vvpowsf(&linear, &exponent, rgbNormalised, &count)
     return PixelBuffer(width: dstW, height: dstH, linearRGB: linear)
   }
 
