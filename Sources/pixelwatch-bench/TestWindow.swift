@@ -8,7 +8,7 @@ final class TestWindow {
 
   let window: NSWindow
   private let animatedLayer: CALayer
-  private var displayLink: CVDisplayLink?
+  private var animationTimer: Timer?
   private var startTime = CFAbsoluteTimeGetCurrent()
 
   init() {
@@ -44,11 +44,11 @@ final class TestWindow {
 
   func show() {
     window.makeKeyAndOrderFront(nil)
-    startDisplayLink()
+    startAnimation()
   }
 
   func close() {
-    stopDisplayLink()
+    stopAnimation()
     window.close()
   }
 
@@ -77,30 +77,24 @@ final class TestWindow {
   }
 
   // MARK: animated half — hue cycle at ~5 Hz
+  //
+  // CVDisplayLink would be the precise approach, but the @convention(c)
+  // callback runs on a non-main thread and Swift 6 strict concurrency
+  // makes the hop back to MainActor.assumeIsolated unreliable (crashes
+  // in the executor check). 5 Hz is well within Timer's resolution, so
+  // a 0.05s Timer on the main run loop is a clean replacement.
 
-  private func startDisplayLink() {
-    var link: CVDisplayLink?
-    CVDisplayLinkCreateWithActiveCGDisplays(&link)
-    guard let link else { return }
-    let pointer = Unmanaged.passUnretained(self).toOpaque()
-    CVDisplayLinkSetOutputCallback(link, { _, _, _, _, _, ctx in
-      // Re-derive `self` on the main actor from the Sendable opaque pointer
-      // to keep Swift 6 strict concurrency happy (TestWindow is non-Sendable
-      // and MainActor-isolated, so we can't capture `me` across the hop).
-      guard let ctx else { return kCVReturnSuccess }
-      DispatchQueue.main.async {
-        let me = Unmanaged<TestWindow>.fromOpaque(ctx).takeUnretainedValue()
-        MainActor.assumeIsolated { me.tick() }
+  private func startAnimation() {
+    animationTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.tick()
       }
-      return kCVReturnSuccess
-    }, pointer)
-    CVDisplayLinkStart(link)
-    displayLink = link
+    }
   }
 
-  private func stopDisplayLink() {
-    if let link = displayLink { CVDisplayLinkStop(link) }
-    displayLink = nil
+  private func stopAnimation() {
+    animationTimer?.invalidate()
+    animationTimer = nil
   }
 
   private func tick() {
