@@ -179,6 +179,9 @@ public final class WatcherOverlayController {
   /// cursor-follow + click monitors. Test paths omit this so no real NSEvent
   /// monitors are installed.
   private let sessionDidStart: @MainActor (any WatcherOverlaySession) -> Void
+  /// Returns the PID of the currently-frontmost application, or nil if unknown.
+  /// `sync()` hides any overlay whose target window's PID doesn't match this.
+  private let frontmostProcessIDProvider: @MainActor () -> pid_t?
 
   private struct OverlayEntry {
     let session: DefaultWatcherOverlaySession
@@ -194,12 +197,16 @@ public final class WatcherOverlayController {
     overlayFactory: @escaping (WatcherID) -> WatcherOverlayWindow,
     mouseLocationProvider: @escaping () -> CGPoint,
     windowSnapshotProvider: some WindowSnapshotProviding,
-    sessionDidStart: @escaping @MainActor (any WatcherOverlaySession) -> Void = { _ in }
+    sessionDidStart: @escaping @MainActor (any WatcherOverlaySession) -> Void = { _ in },
+    frontmostProcessIDProvider: @escaping @MainActor () -> pid_t? = {
+      NSWorkspace.shared.frontmostApplication?.processIdentifier
+    }
   ) {
     self.overlayFactory = overlayFactory
     self.mouseLocationProvider = mouseLocationProvider
     self.windowSnapshotProvider = windowSnapshotProvider
     self.sessionDidStart = sessionDidStart
+    self.frontmostProcessIDProvider = frontmostProcessIDProvider
   }
 
   /// Convenience init that wires up live AppKit dependencies.
@@ -292,13 +299,17 @@ public final class WatcherOverlayController {
   }
 
   /// Refresh overlay position and visibility against current window geometry.
+  /// An overlay is visible only when its target window is on-screen AND the
+  /// target's app is the frontmost app. Cmd+Tab away → hide; Cmd+Tab back → show.
   public func sync() {
+    let frontmostPID = frontmostProcessIDProvider()
     for (_, entry) in entries {
       guard let snapshot = windowSnapshotProvider.windowSnapshot(windowID: entry.windowID) else {
         entry.overlay.setVisible(false)
         continue
       }
-      entry.overlay.setVisible(snapshot.isVisible)
+      let isFrontmost = (snapshot.processID == frontmostPID)
+      entry.overlay.setVisible(snapshot.isVisible && isFrontmost)
     }
   }
 }

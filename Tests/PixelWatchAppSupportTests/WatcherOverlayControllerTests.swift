@@ -30,6 +30,39 @@ final class WatcherOverlayControllerTests: XCTestCase {
     XCTAssertEqual(session.frozenRect, CGRect(x: 120, y: 80, width: 100, height: 100))
   }
 
+  func testSyncHidesOverlayWhenTargetAppIsNotFrontmost() {
+    let overlay = RecordingOverlayWindow()
+    let snapshot = WindowSnapshot(
+      windowID: 42,
+      processID: 99,
+      bundleID: "com.example",
+      title: "Editor",
+      bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
+      isVisible: true
+    )
+    var frontmostPID: pid_t = 99
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { CGPoint(x: 220, y: 180) },
+      windowSnapshotProvider: StubWindowSnapshotProvider(snapshots: [snapshot]),
+      frontmostProcessIDProvider: { frontmostPID }
+    )
+
+    // begin() emits one setVisible(true). sync() appends one value per call.
+    _ = controller.begin(windowID: 42)
+
+    controller.sync()
+    XCTAssertEqual(overlay.visibleValues, [true, true])  // target is frontmost → visible
+
+    frontmostPID = 88
+    controller.sync()
+    XCTAssertEqual(overlay.visibleValues, [true, true, false])  // user Cmd+Tabbed away → hidden
+
+    frontmostPID = 99
+    controller.sync()
+    XCTAssertEqual(overlay.visibleValues, [true, true, false, true])  // Cmd+Tab back → visible
+  }
+
   func testSessionCancelHidesOverlayAndStopsTracking() async {
     let overlay = RecordingOverlayWindow()
     let controller = WatcherOverlayController(
