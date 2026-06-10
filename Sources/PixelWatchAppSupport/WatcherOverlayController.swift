@@ -5,10 +5,10 @@ import CoreGraphics
 
 /// A lightweight handle to an in-progress overlay-placement session.
 ///
-/// Intentionally non-Sendable and non-@MainActor at the protocol level so that
-/// tests and callers can access `frozenRect` and call `freeze()` synchronously
-/// without explicit actor hops. Callers are responsible for using the session
-/// on a single thread (typically the main thread in the live app).
+/// Main-actor isolated because the session backs an AppKit overlay window and
+/// is registered with the @MainActor `WatcherOverlayController`. `AnyObject`
+/// so the controller can identify the session by reference in `register`.
+@MainActor
 public protocol WatcherOverlaySession: AnyObject {
   /// The rect chosen by the user after calling `freeze()`. Nil until frozen.
   var frozenRect: CGRect? { get }
@@ -34,10 +34,11 @@ public protocol WindowSnapshotProviding: Sendable {
 
 // MARK: - Session implementation
 
-/// Backs a WatcherOverlaySession. All mutations are expected to happen on the
-/// same thread the controller runs on (the main thread in the live app).
+/// Backs a WatcherOverlaySession. Lives on the main actor with the controller.
 private final class DefaultWatcherOverlaySession: WatcherOverlaySession {
   private let overlay: WatcherOverlayWindow
+  // NOTE: currentFrame is updated by cursor-tracking — not wired in this task.
+  // The live NSPanel overlay will mutate this via its mouse-move handler.
   private var currentFrame: CGRect
   private(set) var frozenRect: CGRect?
 
@@ -110,6 +111,7 @@ private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlay
 ///    border color.
 /// 4. Call `sync()` periodically to refresh overlay position/visibility against the
 ///    live window geometry.
+@MainActor
 public final class WatcherOverlayController {
   private let overlayFactory: (WatcherID) -> WatcherOverlayWindow
   private let mouseLocationProvider: () -> CGPoint
@@ -136,12 +138,12 @@ public final class WatcherOverlayController {
   }
 
   /// Convenience init that wires up live AppKit dependencies.
-  /// Must be called and used on the main thread in the live app.
   public convenience init() {
     self.init(
       overlayFactory: { _ in
-        // WatcherOverlayPanel is an NSPanel subclass (@MainActor). The live
-        // app calls begin() on the main thread, so this closure runs there.
+        // The controller is @MainActor; this closure is only called from begin()
+        // which is @MainActor. assumeIsolated keeps Swift 6 happy because the
+        // closure type itself is nonisolated.
         MainActor.assumeIsolated {
           WatcherOverlayPanel(
             contentRect: .zero,
@@ -193,6 +195,19 @@ public final class WatcherOverlayController {
     entries[sessionID] = OverlayEntry(session: session, overlay: overlay, windowID: windowID)
 
     return session
+  }
+
+  /// Re-key a previously-begun overlay session to its persisted watcher ID,
+  /// so `update(watcherID:state:)` and `sync()` can find it. Call this once,
+  /// after the user saves the configure sheet and the watcher is persisted.
+  public func register(watcherID: WatcherID, for session: any WatcherOverlaySession) {
+    // Identify by reference — the entry was inserted with the same session instance.
+    guard let (currentKey, entry) = entries.first(where: { $0.value.session === session }) else {
+      assertionFailure("WatcherOverlayController.register: session not found")
+      return
+    }
+    entries.removeValue(forKey: currentKey)
+    entries[watcherID] = entry
   }
 
   /// Update the border color for an active watcher's overlay.

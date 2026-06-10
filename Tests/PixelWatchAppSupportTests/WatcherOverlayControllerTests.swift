@@ -3,6 +3,7 @@ import CoreGraphics
 import XCTest
 @testable import PixelWatchAppSupport
 
+@MainActor
 final class WatcherOverlayControllerTests: XCTestCase {
   func testOverlayFollowsWindowAndFreezesOnClick() async {
     let overlay = RecordingOverlayWindow()
