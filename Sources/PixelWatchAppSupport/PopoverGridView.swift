@@ -1,5 +1,4 @@
 // Sources/PixelWatchAppSupport/PopoverGridView.swift
-import AppKit
 import SwiftUI
 
 private let cellWidth: CGFloat = 120
@@ -22,22 +21,21 @@ public struct PopoverGridView: View {
   public var body: some View {
     VStack(spacing: 0) {
       ScrollView {
+        LazyVGrid(
+          columns: [GridItem(.adaptive(minimum: cellWidth), spacing: gridSpacing)],
+          spacing: gridSpacing
+        ) {
+          ForEach(model.items) { item in
+            ThumbnailCellView(item: item)
+          }
+          AddCellView(onAdd: onAdd)
+        }
+        .padding(gridSpacing)
         if model.items.isEmpty {
           Text("No watchers yet")
             .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 80)
-            .padding()
-        } else {
-          LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: cellWidth), spacing: gridSpacing)],
-            spacing: gridSpacing
-          ) {
-            ForEach(model.items) { item in
-              ThumbnailCellView(item: item)
-            }
-            AddCellView(onAdd: onAdd)
-          }
-          .padding(gridSpacing)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, gridSpacing)
         }
       }
 
@@ -45,7 +43,7 @@ public struct PopoverGridView: View {
 
       HStack {
         Spacer()
-        Button(action: showQuitMenu) {
+        Button(action: onQuit) {
           Image(systemName: "gearshape")
             .imageScale(.medium)
         }
@@ -54,19 +52,6 @@ public struct PopoverGridView: View {
       }
     }
     .frame(width: 380)
-  }
-
-  @MainActor
-  private func showQuitMenu() {
-    let menu = NSMenu()
-    menu.addItem(NSMenuItem(
-      title: "Quit PixelWatch",
-      action: #selector(NSApplication.terminate(_:)),
-      keyEquivalent: "q"
-    ))
-    if let event = NSApp.currentEvent {
-      NSMenu.popUpContextMenu(menu, with: event, for: NSApp.keyWindow?.contentView ?? NSView())
-    }
   }
 }
 
