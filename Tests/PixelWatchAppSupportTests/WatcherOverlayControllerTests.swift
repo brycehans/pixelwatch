@@ -63,6 +63,28 @@ final class WatcherOverlayControllerTests: XCTestCase {
     XCTAssertEqual(overlay.visibleValues, [true, true, false, true])  // Cmd+Tab back → visible
   }
 
+  // Coord conversion: controller produces top-left-origin frames, NSWindow uses
+  // bottom-left. The panel converts at the boundary; this locks the math.
+  func testScreenBottomLeftRectConvertsTopLeftFrame() {
+    // Cursor visually at TL (700, 500) on a screen of height 1117. The controller
+    // would compose a TL frame of (600, 400, 100, 100). NSWindow needs the bottom
+    // edge measured from the screen bottom: 1117 - 400 - 100 = 617.
+    let bl = screenBottomLeftRect(
+      fromTopLeft: CGRect(x: 600, y: 400, width: 100, height: 100),
+      screenHeight: 1117
+    )
+    XCTAssertEqual(bl, CGRect(x: 600, y: 617, width: 100, height: 100))
+  }
+
+  func testScreenBottomLeftRectIsInvolutiveOverTwoFlips() {
+    // Round-tripping a frame through the conversion twice should return the
+    // original — sanity check that the math has no hidden offset.
+    let original = CGRect(x: 12, y: 34, width: 56, height: 78)
+    let once = screenBottomLeftRect(fromTopLeft: original, screenHeight: 1000)
+    let twice = screenBottomLeftRect(fromTopLeft: once, screenHeight: 1000)
+    XCTAssertEqual(twice, original)
+  }
+
   func testSessionCancelHidesOverlayAndStopsTracking() async {
     let overlay = RecordingOverlayWindow()
     let controller = WatcherOverlayController(

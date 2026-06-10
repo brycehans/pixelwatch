@@ -112,6 +112,24 @@ final class DefaultWatcherOverlaySession: WatcherOverlaySession {
   }
 }
 
+// MARK: - Coord conversion
+
+/// Converts a top-left-origin rect (the controller's convention — top is `origin.y`)
+/// to NSWindow's bottom-left-origin global screen coords. `screenHeight` is the
+/// height of the screen the rect lives on.
+///
+/// The controller composes frames in TL terms ("cursor at the bottom-right of
+/// the 100×100 square") because `tick()` math reads naturally that way; AppKit's
+/// NSWindow.setFrame wants BL. This is the single point of conversion.
+func screenBottomLeftRect(fromTopLeft frame: CGRect, screenHeight: CGFloat) -> CGRect {
+  CGRect(
+    x: frame.origin.x,
+    y: screenHeight - frame.origin.y - frame.height,
+    width: frame.width,
+    height: frame.height
+  )
+}
+
 // MARK: - Live NSPanel overlay
 
 /// A borderless, floating NSPanel that implements WatcherOverlayWindow.
@@ -140,7 +158,10 @@ private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlay
   }
 
   func setFrame(_ frame: CGRect) {
-    setFrame(frame, display: true)
+    // Frame comes in as top-left-origin; NSWindow wants bottom-left.
+    let screenH = screen?.frame.height ?? NSScreen.main?.frame.height ?? 0
+    let bl = screenBottomLeftRect(fromTopLeft: frame, screenHeight: screenH)
+    setFrame(bl, display: true)
   }
 
   func setBorderColor(_ color: NSColor) {
