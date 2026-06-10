@@ -238,7 +238,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
         latestFrame: snap?.latestFrame
       ))
     }
-    await MainActor.run { self.popoverModel.items = items }
+    popoverModel.items = items
   }
 
   private static var watchersURL: URL {
