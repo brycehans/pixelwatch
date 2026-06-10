@@ -30,6 +30,12 @@ public protocol WatcherOverlayWindow: AnyObject {
   func setFrame(_ frame: CGRect)
   func setBorderColor(_ color: NSColor)
   func setVisible(_ visible: Bool)
+  func setLabelText(_ text: String)
+}
+
+public extension WatcherOverlayWindow {
+  // Default no-op so non-label-aware stubs in tests don't need to opt in.
+  func setLabelText(_: String) {}
 }
 
 /// Provides live window geometry by window ID. Sendable so the controller can
@@ -146,7 +152,15 @@ func screenBottomLeftRect(fromTopLeft frame: CGRect, screenHeight: CGFloat) -> C
 // MARK: - Live NSPanel overlay
 
 /// A borderless, floating NSPanel that implements WatcherOverlayWindow.
+/// The panel is taller than the watched rect by `labelHeight` — the top
+/// strip holds a state-name label, the bottom matches the watched area and
+/// carries the colored border.
 private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlayWindow {
+  static let labelHeight: CGFloat = 18
+
+  private let borderLayer = CALayer()
+  private let labelLayer = CATextLayer()
+
   override init(
     contentRect: NSRect,
     styleMask style: NSWindow.StyleMask,
@@ -165,20 +179,46 @@ private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlay
     isMovable = false
     level = .floating
     ignoresMouseEvents = false
-    contentView?.wantsLayer = true
-    contentView?.layer?.borderWidth = 3
-    contentView?.layer?.cornerRadius = 0
+
+    guard let content = contentView else { return }
+    content.wantsLayer = true
+    // No layer-wide border — the watched-area border is drawn by borderLayer.
+    content.layer?.borderWidth = 0
+
+    borderLayer.borderWidth = 3
+    borderLayer.cornerRadius = 0
+    content.layer?.addSublayer(borderLayer)
+
+    let scale = NSScreen.main?.backingScaleFactor ?? 2
+    labelLayer.contentsScale = scale
+    labelLayer.fontSize = 11
+    labelLayer.alignmentMode = .center
+    labelLayer.foregroundColor = NSColor.white.cgColor
+    labelLayer.backgroundColor = NSColor.black.withAlphaComponent(0.65).cgColor
+    labelLayer.truncationMode = .end
+    // Vertical centering of CATextLayer text: fontSize 11 in an 18-tall layer
+    // sits naturally near the top; nudge baseline by setting a small inset
+    // via geometry rather than alignment (CATextLayer has no vertical align).
+    content.layer?.addSublayer(labelLayer)
   }
 
   func setFrame(_ frame: CGRect) {
-    // Frame comes in as top-left-origin; NSWindow wants bottom-left.
+    // Frame in is the WATCHED rect, top-left origin. Extend up by labelHeight
+    // so the label has room above the watched area without occluding it.
+    let extendedTopLeft = CGRect(
+      x: frame.origin.x,
+      y: frame.origin.y - Self.labelHeight,
+      width: frame.width,
+      height: frame.height + Self.labelHeight
+    )
     let screenH = screen?.frame.height ?? NSScreen.main?.frame.height ?? 0
-    let bl = screenBottomLeftRect(fromTopLeft: frame, screenHeight: screenH)
+    let bl = screenBottomLeftRect(fromTopLeft: extendedTopLeft, screenHeight: screenH)
     setFrame(bl, display: true)
+    layoutSublayers()
   }
 
   func setBorderColor(_ color: NSColor) {
-    contentView?.layer?.borderColor = color.cgColor
+    borderLayer.borderColor = color.cgColor
   }
 
   func setVisible(_ visible: Bool) {
@@ -187,6 +227,31 @@ private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlay
     } else {
       orderOut(nil)
     }
+  }
+
+  func setLabelText(_ text: String) {
+    labelLayer.string = text
+  }
+
+  /// Lay out the border and label sublayers inside contentView. contentView
+  /// uses bottom-left coords by default, so the label (visually at the top)
+  /// has the larger y origin.
+  private func layoutSublayers() {
+    guard let bounds = contentView?.bounds else { return }
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    borderLayer.frame = CGRect(
+      x: 0, y: 0,
+      width: bounds.width,
+      height: max(0, bounds.height - Self.labelHeight)
+    )
+    labelLayer.frame = CGRect(
+      x: 0,
+      y: bounds.height - Self.labelHeight,
+      width: bounds.width,
+      height: Self.labelHeight
+    )
+    CATransaction.commit()
   }
 }
 
@@ -312,6 +377,7 @@ public final class WatcherOverlayController {
     overlay.setFrame(initialFrame)
     overlay.setVisible(true)
     overlay.setBorderColor(OverlayAppearance.borderColor(for: .idle))
+    overlay.setLabelText(OverlayAppearance.labelText(for: .idle))
 
     entries[sessionID] = OverlayEntry(session: session, overlay: overlay, windowID: windowID)
 
@@ -357,6 +423,7 @@ public final class WatcherOverlayController {
     overlay.setFrame(screenRect)
     overlay.setVisible(true)
     overlay.setBorderColor(OverlayAppearance.borderColor(for: state))
+    overlay.setLabelText(OverlayAppearance.labelText(for: state))
 
     entries[watcherID] = OverlayEntry(
       session: session,
@@ -390,10 +457,11 @@ public final class WatcherOverlayController {
     entries[watcherID] = entry
   }
 
-  /// Update the border color for an active watcher's overlay.
+  /// Update the border color and label text for an active watcher's overlay.
   public func update(watcherID: WatcherID, state: WatcherState) {
     guard let entry = entries[watcherID] else { return }
     entry.overlay.setBorderColor(OverlayAppearance.borderColor(for: state))
+    entry.overlay.setLabelText(OverlayAppearance.labelText(for: state))
     entry.overlay.setVisible(true)
   }
 

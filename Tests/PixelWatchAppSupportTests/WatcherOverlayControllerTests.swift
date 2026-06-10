@@ -270,6 +270,63 @@ final class WatcherOverlayControllerTests: XCTestCase {
     XCTAssertTrue(overlay.frames.isEmpty, "no overlay should be created when the window isn't resolvable")
   }
 
+  func testOverlayLabelReflectsStateAcrossBeginAndUpdate() {
+    let overlay = RecordingOverlayWindow()
+    let snapshot = WindowSnapshot(
+      windowID: 42,
+      processID: 99,
+      bundleID: "com.example",
+      title: "Editor",
+      bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
+      isVisible: true
+    )
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { CGPoint(x: 220, y: 180) },
+      windowSnapshotProvider: StubWindowSnapshotProvider(snapshots: [snapshot]),
+      frontmostProcessIDProvider: { 99 }
+    )
+
+    let session = controller.begin(windowID: 42)
+    XCTAssertEqual(overlay.labelTexts, ["idle"])
+
+    session.freeze()
+    let watcherID = UUID()
+    controller.register(watcherID: watcherID, for: session)
+    controller.update(watcherID: watcherID, state: .armed)
+    XCTAssertEqual(overlay.labelTexts, ["idle", "armed"])
+
+    controller.update(watcherID: watcherID, state: .triggered)
+    controller.update(watcherID: watcherID, state: .errored("scratched"))
+    XCTAssertEqual(overlay.labelTexts, ["idle", "armed", "triggered", "errored"])
+  }
+
+  func testRestoreSetsLabelToInitialState() {
+    let overlay = RecordingOverlayWindow()
+    let snapshot = WindowSnapshot(
+      windowID: 42,
+      processID: 99,
+      bundleID: "com.example",
+      title: "Editor",
+      bounds: CGRect(x: 200, y: 100, width: 800, height: 600),
+      isVisible: true
+    )
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { .zero },
+      windowSnapshotProvider: StubWindowSnapshotProvider(snapshots: [snapshot]),
+      frontmostProcessIDProvider: { 99 }
+    )
+
+    controller.restore(
+      watcherID: UUID(),
+      windowID: 42,
+      windowRelativeRect: CGRect(x: 0, y: 0, width: 50, height: 50),
+      state: .armed
+    )
+    XCTAssertEqual(overlay.labelTexts, ["armed"])
+  }
+
   func testSessionCancelHidesOverlayAndStopsTracking() async {
     let overlay = RecordingOverlayWindow()
     let controller = WatcherOverlayController(
@@ -323,6 +380,7 @@ private final class RecordingOverlayWindow: WatcherOverlayWindow {
   private(set) var frames: [CGRect] = []
   private(set) var borderColors: [NSColor] = []
   private(set) var visibleValues: [Bool] = []
+  private(set) var labelTexts: [String] = []
 
   func setFrame(_ frame: CGRect) {
     frames.append(frame)
@@ -334,5 +392,9 @@ private final class RecordingOverlayWindow: WatcherOverlayWindow {
 
   func setVisible(_ visible: Bool) {
     visibleValues.append(visible)
+  }
+
+  func setLabelText(_ text: String) {
+    labelTexts.append(text)
   }
 }

@@ -10,6 +10,13 @@ final class OverlayAppearanceTests: XCTestCase {
     XCTAssertEqual(OverlayAppearance.borderColor(for: .errored("bad")), .systemOrange)
   }
 
+  func testLabelTextMatchesStateName() {
+    XCTAssertEqual(OverlayAppearance.labelText(for: .idle), "idle")
+    XCTAssertEqual(OverlayAppearance.labelText(for: .armed), "armed")
+    XCTAssertEqual(OverlayAppearance.labelText(for: .triggered), "triggered")
+    XCTAssertEqual(OverlayAppearance.labelText(for: .errored("anything")), "errored")
+  }
+
   /// CALayer.borderColor expects an RGBA CGColor; a 2-component genericGray CGColor
   /// renders as garbage (was rendering salmon for the .idle state pre-fix).
   func testBorderColorsAreRGBCompatibleForEveryState() {
