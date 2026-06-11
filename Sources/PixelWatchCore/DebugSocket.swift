@@ -18,15 +18,40 @@ public enum DebugSocketError: Error {
 // MARK: - Commands sent in from socket clients
 
 /// Imperative commands a socket client can send to drive the running app.
-/// Wire format is `{"cmd":"<case>"}` per line.
-public enum DebugCommand: String, Codable, Sendable, Equatable {
+/// Wire format is `{"cmd":"<case>"}` per line; dropAt also carries `"x"` and `"y"`.
+public enum DebugCommand: Codable, Sendable, Equatable {
   case newWatcher
   case quit
-}
+  case dropAt(x: Double, y: Double)
 
-/// Internal envelope used to decode `{"cmd":"<case>"}` lines.
-private struct DebugCommandEnvelope: Decodable {
-  let cmd: DebugCommand
+  private enum CodingKeys: String, CodingKey { case cmd, x, y }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let cmd = try c.decode(String.self, forKey: .cmd)
+    switch cmd {
+    case "newWatcher": self = .newWatcher
+    case "quit": self = .quit
+    case "dropAt":
+      let x = try c.decode(Double.self, forKey: .x)
+      let y = try c.decode(Double.self, forKey: .y)
+      self = .dropAt(x: x, y: y)
+    default:
+      throw DecodingError.dataCorruptedError(forKey: .cmd, in: c, debugDescription: "Unknown command: \(cmd)")
+    }
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    switch self {
+    case .newWatcher: try c.encode("newWatcher", forKey: .cmd)
+    case .quit: try c.encode("quit", forKey: .cmd)
+    case let .dropAt(x, y):
+      try c.encode("dropAt", forKey: .cmd)
+      try c.encode(x, forKey: .x)
+      try c.encode(y, forKey: .y)
+    }
+  }
 }
 
 // MARK: - Per-client state (not an actor; only touched from inside the DebugSocket actor)
@@ -211,8 +236,8 @@ public actor DebugSocket {
           let payload = Data(lineData)
           if let event = try? decoderRef.decode(PixelWatchEvent.self, from: payload) {
             Task { await busRef.publish(event) }
-          } else if let envelope = try? decoderRef.decode(DebugCommandEnvelope.self, from: payload) {
-            commandHandlerRef(envelope.cmd)
+          } else if let command = try? decoderRef.decode(DebugCommand.self, from: payload) {
+            commandHandlerRef(command)
           } else {
             let msg = "[DebugSocket] could not decode line: \(String(data: payload, encoding: .utf8) ?? "<non-UTF8>")\n"
             if let d = msg.data(using: .utf8) {

@@ -139,6 +139,8 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       newWatcherClicked(nil)
     case .quit:
       NSApp.terminate(nil)
+    case let .dropAt(x, y):
+      handleDrop(at: CGPoint(x: x, y: y))
     }
   }
 

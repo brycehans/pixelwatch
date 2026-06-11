@@ -41,6 +41,9 @@ final class DragSourceNSView: NSView {
 
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
+    // Hide in-grid visual while dragging — the floating panel IS the square.
+    guard !isDragging else { return }
+
     let inset = bounds.insetBy(dx: 2, dy: 2)
     let path = NSBezierPath(roundedRect: inset, xRadius: 4, yRadius: 4)
     NSColor.secondaryLabelColor.setStroke()
@@ -84,6 +87,7 @@ final class DragSourceNSView: NSView {
 
   private func startDrag() {
     isDragging = true
+    needsDisplay = true  // blank the in-grid cell; floating panel becomes the square
     onDragStarted()
     showFloatingPanel(at: NSEvent.mouseLocation)
 
@@ -125,6 +129,7 @@ final class DragSourceNSView: NSView {
     floatingPanel?.close()
     floatingPanel = nil
 
+    needsDisplay = true  // restore the in-grid cell
     onDrop(screenPoint)
   }
 
