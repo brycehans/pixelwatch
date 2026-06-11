@@ -43,11 +43,13 @@ public struct PopoverGridView: View {
 
       HStack {
         Spacer()
-        Button(action: onQuit) {
-          Image(systemName: "gearshape")
-            .imageScale(.medium)
+        Menu {
+          Button("Quit PixelWatch", action: onQuit)
+        } label: {
+          Image(systemName: "gearshape").imageScale(.medium)
         }
-        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
         .padding(8)
       }
     }
