@@ -195,6 +195,8 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       guard
         let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)]),
         pid != ownPID,
+        // Skip untitled subwindows — they can't be matched by WindowResolver later.
+        let windowTitle = info[String(kCGWindowName)] as? String, !windowTitle.isEmpty,
         let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]),
         bounds.contains(cgPoint)
       else { continue }
@@ -226,10 +228,18 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       isVisible: true
     )
 
-    let dropSize = CGSize(width: 200, height: 150)
-    let screenRect = CGRect(
+    // Match the size of the floating drag panel exactly so the overlay lands where the
+    // square was dropped. Clamp so the rect stays within the window bounds.
+    let dropSize = CGSize(width: 120, height: 96)
+    let unclamped = CGRect(
       x: cgPoint.x - dropSize.width / 2,
       y: cgPoint.y - dropSize.height / 2,
+      width: dropSize.width,
+      height: dropSize.height
+    )
+    let screenRect = CGRect(
+      x: max(bounds.minX, min(unclamped.minX, bounds.maxX - dropSize.width)),
+      y: max(bounds.minY, min(unclamped.minY, bounds.maxY - dropSize.height)),
       width: dropSize.width,
       height: dropSize.height
     )
