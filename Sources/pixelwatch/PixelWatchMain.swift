@@ -400,6 +400,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       items.append(WatcherThumbnailItem(
         id: watcher.id,
         state: snap?.state ?? .idle,
+        baseline: snap?.baseline,
         latestFrame: snap?.latestFrame
       ))
     }

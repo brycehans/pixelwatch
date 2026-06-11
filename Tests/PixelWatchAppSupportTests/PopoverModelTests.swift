@@ -14,6 +14,7 @@ final class PopoverModelTests: XCTestCase {
     let item = WatcherThumbnailItem(
       id: UUID(),
       state: .idle,
+      baseline: nil,
       latestFrame: nil
     )
     model.items = [item]
@@ -23,8 +24,8 @@ final class PopoverModelTests: XCTestCase {
 
   func testWatcherThumbnailItemIsIdentifiableById() {
     let id = UUID()
-    let a = WatcherThumbnailItem(id: id, state: .armed, latestFrame: nil)
-    let b = WatcherThumbnailItem(id: id, state: .idle, latestFrame: nil)
+    let a = WatcherThumbnailItem(id: id, state: .armed, baseline: nil, latestFrame: nil)
+    let b = WatcherThumbnailItem(id: id, state: .idle, baseline: nil, latestFrame: nil)
     XCTAssertEqual(a.id, b.id)
   }
 }
