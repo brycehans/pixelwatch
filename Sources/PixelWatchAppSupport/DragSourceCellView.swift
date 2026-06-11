@@ -51,7 +51,7 @@ final class DragSourceNSView: NSView {
     path.stroke()
 
     let attrs: [NSAttributedString.Key: Any] = [
-      .font: NSFont.systemFont(ofSize: 28),
+      .font: NSFont.systemFont(ofSize: 14),
       .foregroundColor: NSColor.secondaryLabelColor,
     ]
     let str = NSAttributedString(string: "+", attributes: attrs)
@@ -180,7 +180,7 @@ private final class DragFloatVisualView: NSView {
     path.stroke()
 
     let attrs: [NSAttributedString.Key: Any] = [
-      .font: NSFont.systemFont(ofSize: 28),
+      .font: NSFont.systemFont(ofSize: 14),
       .foregroundColor: NSColor.secondaryLabelColor.withAlphaComponent(0.85),
     ]
     let str = NSAttributedString(string: "+", attributes: attrs)

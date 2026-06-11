@@ -1,12 +1,6 @@
 // Sources/PixelWatchAppSupport/PopoverGridView.swift
 import SwiftUI
 
-private let cellWidth: CGFloat = 120
-private let cellHeight: CGFloat = 96
-private let labelHeight: CGFloat = 18
-private let borderWidth: CGFloat = 3
-private let gridSpacing: CGFloat = 10
-
 public struct PopoverGridView: View {
   @State var model: PopoverModel
   let onDelete: (WatcherID) -> Void
@@ -34,31 +28,34 @@ public struct PopoverGridView: View {
   public var body: some View {
     VStack(spacing: 0) {
       ScrollView {
-        LazyVGrid(
-          columns: [GridItem(.adaptive(minimum: cellWidth), spacing: gridSpacing)],
-          spacing: gridSpacing
-        ) {
-          ForEach(model.items) { item in
-            ThumbnailCellView(item: item, onDelete: { onDelete(item.id) })
-          }
-          DragSourceCellView(
-            onDrop: onDrop,
-            onDragStarted: onDragStarted
-          )
-          .frame(width: cellWidth, height: cellHeight)
-        }
-        .padding(gridSpacing)
         if model.items.isEmpty {
           Text("No watchers yet")
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
-            .padding(.bottom, gridSpacing)
+            .padding(.vertical, 16)
+        } else {
+          LazyVStack(spacing: 0) {
+            ForEach(model.items) { item in
+              WatcherRowView(
+                item: item,
+                onDelete: { onDelete(item.id) },
+                onArm: { onArm(item.id) }
+              )
+              if item.id != model.items.last?.id {
+                Divider()
+                  .padding(.leading, 12)
+              }
+            }
+          }
         }
       }
 
       Divider()
 
       HStack {
+        DragSourceCellView(onDrop: onDrop, onDragStarted: onDragStarted)
+          .frame(width: 28, height: 28)
+          .padding(.leading, 8)
         Spacer()
         Menu {
           Button("Quit PixelWatch", action: onQuit)
@@ -74,47 +71,85 @@ public struct PopoverGridView: View {
   }
 }
 
-private struct ThumbnailCellView: View {
+// MARK: - Row
+
+private struct WatcherRowView: View {
   let item: WatcherThumbnailItem
   let onDelete: () -> Void
+  let onArm: () -> Void
+
+  var showRearm: Bool {
+    switch item.state {
+    case .triggered, .errored: return true
+    default: return false
+    }
+  }
 
   var body: some View {
-    ZStack(alignment: .topTrailing) {
-      VStack(spacing: 0) {
+    HStack(spacing: 0) {
+      // Col 1: baseline thumbnail
+      ThumbnailView(buffer: item.baseline)
+        .frame(width: 50)
+
+      // Col 2: status dot + state label
+      HStack(spacing: 6) {
+        Circle()
+          .fill(Color(nsColor: OverlayAppearance.borderColor(for: item.state)))
+          .frame(width: 8, height: 8)
         Text(OverlayAppearance.labelText(for: item.state))
           .font(.system(size: 11))
-          .foregroundStyle(.white)
-          .frame(maxWidth: .infinity, minHeight: labelHeight, maxHeight: labelHeight)
-          .background(Color.black.opacity(0.65))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+      .padding(.horizontal, 8)
+      .frame(maxWidth: .infinity, alignment: .leading)
 
-        ZStack {
-          Color.black
-          if let nsImage = item.latestFrame?.displayImage {
-            Image(nsImage: nsImage)
-              .resizable()
-              .scaledToFill()
+      // Col 3: latest-frame thumbnail
+      ThumbnailView(buffer: item.latestFrame)
+        .frame(width: 50)
+
+      // Col 4: action icons
+      HStack(spacing: 4) {
+        if showRearm {
+          Button(action: onArm) {
+            Image(systemName: "arrow.clockwise")
+              .foregroundStyle(.secondary)
           }
+          .buttonStyle(.plain)
         }
-        .frame(width: cellWidth, height: cellHeight - labelHeight)
-        .clipped()
-        .overlay(
-          RoundedRectangle(cornerRadius: 0)
-            .strokeBorder(
-              Color(nsColor: OverlayAppearance.borderColor(for: item.state)),
-              lineWidth: borderWidth
-            )
-        )
+        Button(action: onDelete) {
+          Image(systemName: "xmark.circle.fill")
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
       }
-
-      Button(action: onDelete) {
-        Image(systemName: "xmark.circle.fill")
-          .foregroundStyle(.white)
-          .shadow(radius: 1)
-      }
-      .buttonStyle(.plain)
-      .padding(4)
+      .frame(width: 44)
     }
-    .frame(width: cellWidth, height: cellHeight)
-    .clipShape(RoundedRectangle(cornerRadius: 4))
+    .padding(.horizontal, 12)
+    .padding(.vertical, 5)
+  }
+}
+
+// MARK: - Thumbnail
+
+private struct ThumbnailView: View {
+  let buffer: PixelBuffer?
+
+  var body: some View {
+    ZStack {
+      Color.black
+      if let nsImage = buffer?.displayImage {
+        Image(nsImage: nsImage)
+          .resizable()
+          .scaledToFill()
+      }
+    }
+    .frame(width: 50, height: 40)
+    .clipped()
+    .cornerRadius(3)
+    .overlay(
+      RoundedRectangle(cornerRadius: 3)
+        .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
+    )
   }
 }
