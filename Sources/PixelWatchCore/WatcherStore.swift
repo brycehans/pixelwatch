@@ -86,6 +86,10 @@ public actor WatcherStore {
     runtimes[watcherID]?.machine.state
   }
 
+  public func remove(id: WatcherID) {
+    runtimes.removeValue(forKey: id)
+  }
+
   public func baseline(for watcherID: WatcherID) -> PixelBuffer? {
     runtimes[watcherID]?.baseline
   }

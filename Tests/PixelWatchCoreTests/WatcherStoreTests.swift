@@ -26,4 +26,23 @@ final class WatcherStoreTests: XCTestCase {
     XCTAssertEqual(snapshot?.latestFrame, frame)
     XCTAssertEqual(snapshot?.latestScore, 0.25)
   }
+
+  func testRemoveDeletesSnapshot() async {
+    let bus = EventBus()
+    let store = WatcherStore(bus: bus)
+    let watcher = makeWatcher(sensitivity: 0.5)
+    await store.add(watcher)
+    let before = await store.snapshot(for: watcher.id)
+    XCTAssertNotNil(before)
+    await store.remove(id: watcher.id)
+    let after = await store.snapshot(for: watcher.id)
+    XCTAssertNil(after)
+  }
+
+  func testRemoveIsNoOpForUnknownID() async {
+    let bus = EventBus()
+    let store = WatcherStore(bus: bus)
+    // Must not crash
+    await store.remove(id: UUID())
+  }
 }
