@@ -1,6 +1,8 @@
 import AppKit
 import CoreGraphics
 
+private let watcherOverlaySize = CGSize(width: 50, height: 40)
+
 // MARK: - Protocols
 
 /// A lightweight handle to an in-progress overlay-placement session.
@@ -118,7 +120,12 @@ final class DefaultWatcherOverlaySession: WatcherOverlaySession {
 
   private func tick() {
     let mouse = mouseLocationProvider()
-    let frame = CGRect(x: mouse.x - 100, y: mouse.y - 100, width: 100, height: 100)
+    let frame = CGRect(
+      x: mouse.x - watcherOverlaySize.width,
+      y: mouse.y - watcherOverlaySize.height,
+      width: watcherOverlaySize.width,
+      height: watcherOverlaySize.height
+    )
     currentFrame = frame
     overlay.setFrame(frame)
   }
@@ -355,13 +362,13 @@ public final class WatcherOverlayController {
     }
 
     let mouse = mouseLocationProvider()
-    // Position: the overlay's top-left is at (mouse.x - 100, mouse.y - 100),
-    // placing the cursor at the bottom-right corner of the 100×100 square.
+    // Position: the overlay's top-left is at (mouse.x - width, mouse.y - height),
+    // placing the cursor at the bottom-right corner of the overlay.
     let initialFrame = CGRect(
-      x: mouse.x - 100,
-      y: mouse.y - 100,
-      width: 100,
-      height: 100
+      x: mouse.x - watcherOverlaySize.width,
+      y: mouse.y - watcherOverlaySize.height,
+      width: watcherOverlaySize.width,
+      height: watcherOverlaySize.height
     )
 
     let sessionID = WatcherID()
@@ -465,11 +472,11 @@ public final class WatcherOverlayController {
   }
 
   /// Update the border color and label text for an active watcher's overlay.
+  /// Does NOT affect visibility — sync() is the sole authority on show/hide.
   public func update(watcherID: WatcherID, state: WatcherState) {
     guard let entry = entries[watcherID] else { return }
     entry.overlay.setBorderColor(OverlayAppearance.borderColor(for: state))
     entry.overlay.setLabelText(OverlayAppearance.labelText(for: state))
-    entry.overlay.setVisible(true)
   }
 
   /// Refresh overlay position and visibility against current window geometry.

@@ -25,9 +25,9 @@ final class WatcherOverlayControllerTests: XCTestCase {
     )
 
     let session = controller.begin(windowID: 42)
-    XCTAssertEqual(overlay.frames.first, CGRect(x: 120, y: 80, width: 100, height: 100))
+    XCTAssertEqual(overlay.frames.first, CGRect(x: 170, y: 140, width: 50, height: 40))
     session.freeze()
-    XCTAssertEqual(session.frozenRect, CGRect(x: 120, y: 80, width: 100, height: 100))
+    XCTAssertEqual(session.frozenRect, CGRect(x: 170, y: 140, width: 50, height: 40))
   }
 
   func testSyncHidesOverlayWhenTargetAppIsNotFrontmost() {
@@ -106,8 +106,8 @@ final class WatcherOverlayControllerTests: XCTestCase {
     )
 
     let session = controller.begin(windowID: 42)
-    // begin sets initial frame at cursor-100,-100 → (120, 80, 100, 100).
-    XCTAssertEqual(overlay.frames.last, CGRect(x: 120, y: 80, width: 100, height: 100))
+    // begin sets initial frame at cursor-50,-40 → (170, 140, 50, 40).
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 170, y: 140, width: 50, height: 40))
 
     session.freeze()
     let watcherID = UUID()
@@ -125,7 +125,7 @@ final class WatcherOverlayControllerTests: XCTestCase {
       )
     )
     controller.sync()
-    XCTAssertEqual(overlay.frames.last, CGRect(x: 170, y: 110, width: 100, height: 100))
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 220, y: 170, width: 50, height: 40))
 
     // Window moves the other way: net delta from anchor is (-30, -20).
     provider.set(
@@ -139,7 +139,7 @@ final class WatcherOverlayControllerTests: XCTestCase {
       )
     )
     controller.sync()
-    XCTAssertEqual(overlay.frames.last, CGRect(x: 90, y: 60, width: 100, height: 100))
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 140, y: 120, width: 50, height: 40))
   }
 
   // If the user moves the target window between clicking-to-freeze and saving
@@ -198,9 +198,9 @@ final class WatcherOverlayControllerTests: XCTestCase {
     controller.sync()
 
     // Anchor was (100, 100); current is (400, 400); delta = (+300, +300).
-    // anchorRect (frozenRect) = (120, 80). Translated: (420, 380).
-    // Pre-fix this would have computed delta from (300, 300), giving (220, 180).
-    XCTAssertEqual(overlay.frames.last, CGRect(x: 420, y: 380, width: 100, height: 100))
+    // anchorRect (frozenRect) = (170, 140). Translated: (470, 440).
+    // Pre-fix this would have computed delta from (300, 300), giving (270, 240).
+    XCTAssertEqual(overlay.frames.last, CGRect(x: 470, y: 440, width: 50, height: 40))
   }
 
   // Disk-loaded watchers need overlay entries; otherwise sync()'s window-follow
