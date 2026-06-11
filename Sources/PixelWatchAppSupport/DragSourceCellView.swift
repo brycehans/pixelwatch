@@ -147,7 +147,7 @@ final class DragSourceNSView: NSView {
     )
     panel.isOpaque = false
     panel.backgroundColor = .clear
-    panel.level = .floating
+    panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
     panel.ignoresMouseEvents = true
     panel.isReleasedWhenClosed = false
 
