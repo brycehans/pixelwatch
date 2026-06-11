@@ -22,8 +22,8 @@ Three targeted changes to the popover UI:
 `PixelWatchAppDelegate` implements the handler:
 
 1. Remove from `watchers` array by ID.
-2. Call `store.remove(id:)` — new method on `WatcherStore` (removes from the in-memory snapshot map and cancels any capture loop).
-3. Call `overlayController.remove(watcherID:)` — new method on `WatcherOverlayController` (tears down the overlay window for that watcher).
+2. Call `store.remove(id:)` — new method on `WatcherStore` (`runtimes.removeValue(forKey:)`). `CaptureStage`'s per-watcher loop self-terminates within one tick: it guards `store.state(for:) == .armed`; after removal that returns `nil`, failing the guard and breaking the loop. No delete-specific bus event needed. `DiffStage`/`DecideStage`/`HookStage` all guard on `store.watcher(for:)` / `store.baseline(for:)` and silently skip events for absent watchers.
+3. Call `overlayController.remove(watcherID:)` — new method on `WatcherOverlayController`: `entry.overlay.setVisible(false)` then `entries.removeValue(forKey:)`.
 4. Call `persistence.save(watchers)`.
 5. Call `refreshPopover()`.
 
@@ -69,13 +69,16 @@ If no non-PixelWatch window is found at the drop point, show a brief `NSAlert`.
 `present(draft:overlay:)` reads `overlay.frozenRect` to compute the watcher rect. For drag-to-create, inject a `FrozenOverlaySession` stub — a simple struct conforming to `WatcherOverlaySession` whose `frozenRect` is the screen rect derived from the drop point:
 
 ```swift
-struct FrozenOverlaySession: WatcherOverlaySession {
+final class FrozenOverlaySession: WatcherOverlaySession {
   let frozenRect: CGRect?
+  init(frozenRect: CGRect?) { self.frozenRect = frozenRect }
   func freeze() {}
   func cancel() {}
   func waitForFreeze() async {}
 }
 ```
+
+`WatcherOverlaySession` is `: AnyObject`-constrained, so this must be a `final class`, not a struct.
 
 `PopoverGridView`'s `onAdd` closure is removed; `DragSourceCellView` replaces `AddCellView` entirely. The `NewWatcherCoordinator` focused-window flow is kept intact for the debug-socket `newWatcher` command path.
 
