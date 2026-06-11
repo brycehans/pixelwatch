@@ -48,8 +48,9 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   private lazy var popoverController: NSHostingController<PopoverGridView> = {
     NSHostingController(rootView: PopoverGridView(
       model: popoverModel,
-      onAdd: { [weak self] in self?.newWatcherClicked(nil) },
       onDelete: { [weak self] id in self?.handleDeleteWatcher(id: id) },
+      onDrop: { [weak self] point in self?.handleDrop(at: point) },
+      onDragStarted: { [weak self] in self?.popover.behavior = .applicationDefined },
       onQuit: { NSApp.terminate(nil) }
     ))
   }()
@@ -169,6 +170,105 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     Task {
       await store.remove(id: id)
       overlayController.remove(watcherID: id)
+      await refreshPopover()
+    }
+  }
+
+  private func handleDrop(at appKitPoint: CGPoint) {
+    popover.behavior = .transient
+    popover.performClose(nil)
+
+    // NSEvent.mouseLocation is AppKit bottom-left; CGWindowList bounds are CG top-left.
+    let screenHeight = NSScreen.main?.frame.height ?? 0
+    let cgPoint = CGPoint(x: appKitPoint.x, y: screenHeight - appKitPoint.y)
+
+    let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+    guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+      return
+    }
+
+    let ownPID = ProcessInfo.processInfo.processIdentifier
+    var targetInfo: [String: Any]?
+    for info in list {
+      guard
+        let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)]),
+        pid != ownPID,
+        let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]),
+        bounds.contains(cgPoint)
+      else { continue }
+      targetInfo = info
+      break
+    }
+
+    guard
+      let info = targetInfo,
+      let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]),
+      let windowID = CGWindowDictParser.uint32Value(info[String(kCGWindowNumber)]),
+      let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)])
+    else {
+      let alert = NSAlert()
+      alert.messageText = "PixelWatch could not find a window at that location."
+      alert.runModal()
+      return
+    }
+
+    let title = (info[String(kCGWindowName)] as? String) ?? ""
+    let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
+
+    let windowSnapshot = WindowSnapshot(
+      windowID: windowID,
+      processID: pid,
+      bundleID: bundleID,
+      title: title,
+      bounds: bounds,
+      isVisible: true
+    )
+
+    let dropSize = CGSize(width: 200, height: 150)
+    let screenRect = CGRect(
+      x: cgPoint.x - dropSize.width / 2,
+      y: cgPoint.y - dropSize.height / 2,
+      width: dropSize.width,
+      height: dropSize.height
+    )
+    let rect = windowRelativeRect(fromScreen: screenRect, windowBounds: bounds)
+    _ = rect  // used by FrozenOverlaySession via overlay.frozenRect in the presenter
+
+    let draft = WatcherDraft(
+      window: windowSnapshot,
+      name: title.isEmpty ? bundleID : title,
+      sensitivity: 0.5,
+      command: "",
+      armed: false
+    )
+
+    let session = FrozenOverlaySession(frozenRect: screenRect)
+    let presenter = AppKitConfigureWatcherSheetPresenter()
+
+    Task {
+      guard let watcher = await presenter.present(draft: draft, overlay: session) else { return }
+      handleWatcherCreatedFromDrag(watcher, windowID: windowID)
+    }
+  }
+
+  private func handleWatcherCreatedFromDrag(_ watcher: Watcher, windowID: UInt32) {
+    watchers.append(watcher)
+    do {
+      try persistence.save(watchers)
+    } catch {
+      NSLog("Failed to save watcher: %@", error.localizedDescription)
+    }
+    Task {
+      await store.add(watcher)
+      if watcher.armed {
+        await WatcherArmService.arm(watcherID: watcher.id, bus: bus, store: store)
+      }
+      overlayController.restore(
+        watcherID: watcher.id,
+        windowID: windowID,
+        windowRelativeRect: watcher.rect,
+        state: watcher.armed ? .armed : .idle
+      )
       await refreshPopover()
     }
   }

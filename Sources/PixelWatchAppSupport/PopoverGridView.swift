@@ -9,19 +9,22 @@ private let gridSpacing: CGFloat = 10
 
 public struct PopoverGridView: View {
   @State var model: PopoverModel
-  let onAdd: () -> Void
   let onDelete: (WatcherID) -> Void
+  let onDrop: @MainActor (CGPoint) -> Void
+  let onDragStarted: @MainActor () -> Void
   let onQuit: () -> Void
 
   public init(
     model: PopoverModel,
-    onAdd: @escaping () -> Void,
     onDelete: @escaping (WatcherID) -> Void,
+    onDrop: @escaping @MainActor (CGPoint) -> Void,
+    onDragStarted: @escaping @MainActor () -> Void = {},
     onQuit: @escaping () -> Void
   ) {
     self.model = model
-    self.onAdd = onAdd
     self.onDelete = onDelete
+    self.onDrop = onDrop
+    self.onDragStarted = onDragStarted
     self.onQuit = onQuit
   }
 
@@ -35,7 +38,11 @@ public struct PopoverGridView: View {
           ForEach(model.items) { item in
             ThumbnailCellView(item: item, onDelete: { onDelete(item.id) })
           }
-          AddCellView(onAdd: onAdd)
+          DragSourceCellView(
+            onDrop: onDrop,
+            onDragStarted: onDragStarted
+          )
+          .frame(width: cellWidth, height: cellHeight)
         }
         .padding(gridSpacing)
         if model.items.isEmpty {
@@ -106,23 +113,5 @@ private struct ThumbnailCellView: View {
     }
     .frame(width: cellWidth, height: cellHeight)
     .clipShape(RoundedRectangle(cornerRadius: 4))
-  }
-}
-
-private struct AddCellView: View {
-  let onAdd: () -> Void
-
-  var body: some View {
-    Button(action: onAdd) {
-      ZStack {
-        RoundedRectangle(cornerRadius: 4)
-          .strokeBorder(Color.secondary, lineWidth: borderWidth)
-        Text("+")
-          .font(.system(size: 28))
-          .foregroundStyle(.secondary)
-      }
-      .frame(width: cellWidth, height: cellHeight)
-    }
-    .buttonStyle(.plain)
   }
 }
