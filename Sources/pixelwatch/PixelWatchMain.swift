@@ -105,6 +105,20 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  func application(_: NSApplication, open urls: [URL]) {
+    for url in urls {
+      guard let command = URLCommandParser.parse(url) else {
+        NSLog("[URL] unrecognised URL: %@", url.absoluteString)
+        continue
+      }
+      switch command {
+      case .arm(let id): handleArmWatcher(id: id)
+      case .pause(let id): handlePauseWatcher(id: id)
+      case .delete(let id): handleDeleteWatcher(id: id)
+      }
+    }
+  }
+
   func applicationWillTerminate(_: Notification) {
     syncTimer?.invalidate()
     syncTimer = nil
@@ -166,6 +180,22 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   private func handleArmWatcher(id: WatcherID) {
     Task {
       await WatcherArmService.arm(watcherID: id, bus: bus, store: store)
+    }
+  }
+
+  private func handlePauseWatcher(id: WatcherID) {
+    guard let idx = watchers.firstIndex(where: { $0.id == id }) else {
+      NSLog("handlePauseWatcher: unknown watcher %@", id.uuidString)
+      return
+    }
+    watchers[idx].armed = false
+    do {
+      try persistence.save(watchers)
+    } catch {
+      NSLog("Failed to persist pause for %@: %@", id.uuidString, error.localizedDescription)
+    }
+    Task {
+      await bus.publish(.paused(watcherID: id, reason: .userPaused))
     }
   }
 
