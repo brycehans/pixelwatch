@@ -153,4 +153,10 @@ cat docs/bench-results/<file>.json | fx 'this.runs.map(r => { const ls = r.watch
 
 # Hook output (OSLog subsystem):
 log show --predicate 'subsystem == "com.bryce.pixelwatch"' --last 1h
+
+# All pixelwatch process logs (NSLog + AppKit noise) — use script to bypass shell quoting issues:
+script -q /dev/null log show --last 15m --process pixelwatch 2>&1 | grep -v 'order window'
+
+# Simulate a drag-to-create drop at screen coords (AppKit bottom-left origin):
+echo '{"cmd":"dropAt","x":800,"y":600}' | nc -U ~/Library/Application\ Support/PixelWatch/bus.sock
 ```
