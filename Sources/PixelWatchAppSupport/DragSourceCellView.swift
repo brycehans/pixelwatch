@@ -108,6 +108,8 @@ final class DragSourceNSView: NSView {
   }
 
   private func endDrag(at screenPoint: CGPoint) {
+    // Guard de-dups: mouseUp (local) and the global .leftMouseUp monitor can both
+    // fire for the same release event when the cursor leaves our window during drag.
     guard isDragging else { return }
     isDragging = false
     dragStartPoint = nil
@@ -153,6 +155,7 @@ final class DragSourceNSView: NSView {
 
 // MARK: - Floating panel visual
 
+@MainActor
 private final class DragFloatVisualView: NSView {
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
