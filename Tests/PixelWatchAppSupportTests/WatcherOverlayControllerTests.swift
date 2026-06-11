@@ -327,6 +327,49 @@ final class WatcherOverlayControllerTests: XCTestCase {
     XCTAssertEqual(overlay.labelTexts, ["armed"])
   }
 
+  func testRemoveHidesOverlayAndDropsEntry() {
+    let overlay = RecordingOverlayWindow()
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { CGPoint(x: 220, y: 180) },
+      windowSnapshotProvider: StubWindowSnapshotProvider(
+        snapshots: [
+          WindowSnapshot(
+            windowID: 42,
+            processID: 99,
+            bundleID: "com.example",
+            title: "Editor",
+            bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
+            isVisible: true
+          )
+        ]
+      )
+    )
+
+    let session = controller.begin(windowID: 42)
+    session.freeze()
+    let watcherID = UUID()
+    controller.register(watcherID: watcherID, for: session)
+
+    controller.remove(watcherID: watcherID)
+
+    // begin shows true; remove hides it
+    XCTAssertEqual(overlay.visibleValues.last, false)
+    // sync() should no-op for removed watcher — no new frames
+    controller.sync()
+    XCTAssertEqual(overlay.frames.count, 1, "sync should not update a removed watcher's overlay")
+  }
+
+  func testRemoveIsNoOpForUnknownWatcherID() {
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in RecordingOverlayWindow() },
+      mouseLocationProvider: { .zero },
+      windowSnapshotProvider: StubWindowSnapshotProvider(snapshots: [])
+    )
+    // Must not crash
+    controller.remove(watcherID: UUID())
+  }
+
   func testSessionCancelHidesOverlayAndStopsTracking() async {
     let overlay = RecordingOverlayWindow()
     let controller = WatcherOverlayController(

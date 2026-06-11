@@ -457,6 +457,13 @@ public final class WatcherOverlayController {
     entries[watcherID] = entry
   }
 
+  /// Hide and remove the overlay for a watcher. No-op if the watcher ID is not registered.
+  public func remove(watcherID: WatcherID) {
+    guard let entry = entries[watcherID] else { return }
+    entry.overlay.setVisible(false)
+    entries.removeValue(forKey: watcherID)
+  }
+
   /// Update the border color and label text for an active watcher's overlay.
   public func update(watcherID: WatcherID, state: WatcherState) {
     guard let entry = entries[watcherID] else { return }
