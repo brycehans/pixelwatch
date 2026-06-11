@@ -88,7 +88,9 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     statusItem?.button?.target = self
     startRuntime()
     startSyncTimer()
-    Task { try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) }
+    if Bundle.main.bundleURL.pathExtension == "app" {
+      Task { try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) }
+    }
     Task { await self.refreshPopover() }
 
     // Start the debug socket unconditionally.

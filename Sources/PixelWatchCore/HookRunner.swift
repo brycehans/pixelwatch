@@ -210,6 +210,9 @@ public final class UNNotificationPoster: NotificationPosting, Sendable {
   public init() {}
 
   public func post(body: String, identifier: String) async {
+    // UNUserNotificationCenter.current() crashes without a proper .app bundle
+    // (e.g. swift run). Skip silently in that case.
+    guard Bundle.main.bundleURL.pathExtension == "app" else { return }
     let content = UNMutableNotificationContent()
     content.title = "PixelWatch"
     content.body = body
