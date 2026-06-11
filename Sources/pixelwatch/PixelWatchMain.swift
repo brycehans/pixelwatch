@@ -280,7 +280,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
 
     // Match the size of the floating drag panel exactly so the overlay lands where the
     // square was dropped. Clamp so the rect stays within the window bounds.
-    let dropSize = CGSize(width: 120, height: 96)
+    let dropSize = CGSize(width: 50, height: 40)
     let unclamped = CGRect(
       x: cgPoint.x - dropSize.width / 2,
       y: cgPoint.y - dropSize.height / 2,
