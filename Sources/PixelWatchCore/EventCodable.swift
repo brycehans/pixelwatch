@@ -62,56 +62,72 @@ extension PixelWatchEvent: Codable {
     case hookFinished
     case paused
     case errored
+    case popoverShowRequested
+    case popoverHideRequested
   }
 
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     let type = try c.decode(EventType.self, forKey: .type)
-    let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
 
     switch type {
     case .armed:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let baseline = try c.decode(PixelBuffer.self, forKey: .baseline)
       self = .armed(watcherID: watcherID, baseline: baseline)
 
     case .frameCaptured:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let frame = try c.decode(PixelBuffer.self, forKey: .frame)
       let epochSeconds = try c.decode(Double.self, forKey: .at)
       let at = Date(timeIntervalSince1970: epochSeconds)
       self = .frameCaptured(watcherID: watcherID, frame: frame, at: at)
 
     case .diffComputed:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let score = try c.decode(Double.self, forKey: .score)
       let frame = try c.decode(PixelBuffer.self, forKey: .frame)
       self = .diffComputed(watcherID: watcherID, score: score, frame: frame)
 
     case .thresholdExceeded:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let score = try c.decode(Double.self, forKey: .score)
       let frame = try c.decode(PixelBuffer.self, forKey: .frame)
       self = .thresholdExceeded(watcherID: watcherID, score: score, frame: frame)
 
     case .windowVanished:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let reason = try c.decode(VanishReason.self, forKey: .reason)
       self = .windowVanished(watcherID: watcherID, reason: reason)
 
     case .hookStarted:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let command = try c.decode(String.self, forKey: .command)
       let reason = try c.decode(FireReason.self, forKey: .reason)
       self = .hookStarted(watcherID: watcherID, command: command, reason: reason)
 
     case .hookFinished:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let exitCode = try c.decode(Int32.self, forKey: .exit)
       let stdout = try c.decode(String.self, forKey: .stdout)
       let stderr = try c.decode(String.self, forKey: .stderr)
       self = .hookFinished(watcherID: watcherID, exit: exitCode, stdout: stdout, stderr: stderr)
 
     case .paused:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let reason = try c.decode(PauseReason.self, forKey: .reason)
       self = .paused(watcherID: watcherID, reason: reason)
 
     case .errored:
+      let watcherID = try c.decode(WatcherID.self, forKey: .watcherID)
       let message = try c.decode(String.self, forKey: .message)
       self = .errored(watcherID: watcherID, message: message)
+
+    case .popoverShowRequested:
+      self = .popoverShowRequested
+
+    case .popoverHideRequested:
+      self = .popoverHideRequested
     }
   }
 
@@ -169,6 +185,12 @@ extension PixelWatchEvent: Codable {
       try c.encode(EventType.errored, forKey: .type)
       try c.encode(watcherID, forKey: .watcherID)
       try c.encode(message, forKey: .message)
+
+    case .popoverShowRequested:
+      try c.encode(EventType.popoverShowRequested, forKey: .type)
+
+    case .popoverHideRequested:
+      try c.encode(EventType.popoverHideRequested, forKey: .type)
     }
   }
 }

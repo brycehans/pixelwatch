@@ -40,7 +40,7 @@ There is no `cooldown` state and no recurring mode. A fired Watcher stays `trigg
 A bidirectional JSONL bridge on a Unix domain socket at `~/Library/Application Support/PixelWatch/bus.sock`. Off by default; toggled in Settings. Reads from clients = bus events serialised one-JSON-per-line; writes from clients = JSONL records decoded as `PixelWatchEvent` and pushed onto the bus, indistinguishable from real events. The socket is the only programmable surface for the app — there is no CLI.
 
 **URL command**:
-An external command delivered through the registered `pixelwatch://` URL scheme. Supported actions are `arm`, `pause`, and `delete`, each with an `id=<Watcher UUID>` query parameter. URL commands are for user automation tools such as BetterTouchTool, Raycast, and shell scripts. They require the app to be launched from the `PixelWatch.app` bundle so Launch Services has registered the scheme.
+An external command delivered through the registered `pixelwatch://` URL scheme. Supported actions are watcher commands `arm`, `pause`, and `delete`, each with an `id=<Watcher UUID>` query parameter, plus popover commands `show` and `hide` with no query parameters. URL commands are for user automation tools such as BetterTouchTool, Raycast, and shell scripts. They require the app to be launched from the `PixelWatch.app` bundle so Launch Services has registered the scheme.
 
 **Replay**:
 The mode invoked via `--replay <file>` (CLI flag at app launch) that suppresses `HookStage`'s actual process spawning so a recorded `.jsonl` session can be re-run against the app without re-triggering real hooks. `HookStage` still emits `hookStarted` / `hookFinished` events with synthetic values so downstream observers see the full event chain.

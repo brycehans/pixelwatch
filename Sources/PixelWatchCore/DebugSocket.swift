@@ -305,7 +305,8 @@ private extension PixelWatchEvent {
       return .diffComputed(watcherID: watcherID, score: score, frame: frame.stub)
     case let .thresholdExceeded(watcherID, score, frame):
       return .thresholdExceeded(watcherID: watcherID, score: score, frame: frame.stub)
-    case .windowVanished, .hookStarted, .hookFinished, .paused, .errored:
+    case .windowVanished, .hookStarted, .hookFinished, .paused, .errored,
+         .popoverShowRequested, .popoverHideRequested:
       return self
     }
   }

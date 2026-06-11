@@ -4,6 +4,16 @@ import XCTest
 
 final class URLCommandParserTests: XCTestCase {
 
+  func testParsesShowURL() {
+    let url = URL(string: "pixelwatch://show")!
+    XCTAssertEqual(URLCommandParser.parse(url), .showPopover)
+  }
+
+  func testParsesHideURL() {
+    let url = URL(string: "pixelwatch://hide")!
+    XCTAssertEqual(URLCommandParser.parse(url), .hidePopover)
+  }
+
   func testParsesArmURL() {
     let id = UUID()
     let url = URL(string: "pixelwatch://arm?id=\(id.uuidString)")!

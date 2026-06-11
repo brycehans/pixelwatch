@@ -111,11 +111,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
         NSLog("[URL] unrecognised URL: %@", url.absoluteString)
         continue
       }
-      switch command {
-      case .arm(let id): handleArmWatcher(id: id)
-      case .pause(let id): handlePauseWatcher(id: id)
-      case .delete(let id): handleDeleteWatcher(id: id)
-      }
+      handle(urlCommand: command)
     }
   }
 
@@ -134,12 +130,21 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @objc private func togglePopover(_ sender: AnyObject?) {
-    guard let button = statusItem?.button else { return }
     if popover.isShown {
-      popover.performClose(sender)
+      hidePopover(sender)
     } else {
-      popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+      showPopover()
     }
+  }
+
+  private func showPopover() {
+    guard let button = statusItem?.button, !popover.isShown else { return }
+    popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+  }
+
+  private func hidePopover(_ sender: AnyObject? = nil) {
+    guard popover.isShown else { return }
+    popover.performClose(sender)
   }
 
   @objc private func newWatcherClicked(_: AnyObject?) {
@@ -201,7 +206,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
 
   private func handleDragStarted() {
     popover.behavior = .applicationDefined
-    popover.performClose(nil)
+    hidePopover()
   }
 
   private func handleDeleteWatcher(id: WatcherID) {
@@ -221,7 +226,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   private func handleDrop(at appKitPoint: CGPoint) {
     NSLog("[DROP] handleDrop called appKit=%@", NSStringFromPoint(appKitPoint))
     popover.behavior = .transient
-    popover.performClose(nil)
+    hidePopover()
 
     // NSEvent.mouseLocation is AppKit bottom-left; CGWindowList bounds are CG top-left.
     let screenHeight = NSScreen.main?.frame.height ?? 0
@@ -409,7 +414,18 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     eventTask = Task {
       var events = await bus.subscribe().makeAsyncIterator()
       while !Task.isCancelled, let event = await events.next() {
-        let watcherID = event.watcherID
+        switch event {
+        case .popoverShowRequested:
+          await MainActor.run { showPopover() }
+          continue
+        case .popoverHideRequested:
+          await MainActor.run { hidePopover() }
+          continue
+        default:
+          break
+        }
+
+        guard let watcherID = event.targetWatcherID else { continue }
         // Re-fetch state after the event so we read post-apply state.
         // Note: WatcherStore and the delegate subscribe independently, so there
         // is a small race where the store may not yet have applied the event;
@@ -423,6 +439,21 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
         }
         await refreshPopover()
       }
+    }
+  }
+
+  private func handle(urlCommand: URLCommand) {
+    switch urlCommand {
+    case .arm(let id):
+      handleArmWatcher(id: id)
+    case .pause(let id):
+      handlePauseWatcher(id: id)
+    case .delete(let id):
+      handleDeleteWatcher(id: id)
+    case .showPopover:
+      Task { await bus.publish(.popoverShowRequested) }
+    case .hidePopover:
+      Task { await bus.publish(.popoverHideRequested) }
     }
   }
 

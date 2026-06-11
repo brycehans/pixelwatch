@@ -95,7 +95,10 @@ public actor WatcherStore {
   }
 
   private func apply(_ event: PixelWatchEvent) {
-    guard var runtime = runtimes[event.watcherID] else { return }
+    guard
+      let watcherID = event.targetWatcherID,
+      var runtime = runtimes[watcherID]
+    else { return }
 
     _ = runtime.machine.apply(event)
     switch event {
@@ -115,10 +118,10 @@ public actor WatcherStore {
       runtime.watcher.armed = false
     case .windowVanished, .errored:
       runtime.watcher.armed = false
-    case .hookStarted, .hookFinished:
+    case .hookStarted, .hookFinished, .popoverShowRequested, .popoverHideRequested:
       break
     }
 
-    runtimes[event.watcherID] = runtime
+    runtimes[watcherID] = runtime
   }
 }

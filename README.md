@@ -180,6 +180,8 @@ Then call:
 open "pixelwatch://arm?id=<UUID>"
 open "pixelwatch://pause?id=<UUID>"
 open "pixelwatch://delete?id=<UUID>"
+open "pixelwatch://show"
+open "pixelwatch://hide"
 ```
 
 Actions:
@@ -187,6 +189,7 @@ Actions:
 - `arm`: resolve the target window, capture a fresh baseline, and start watching.
 - `pause`: persist `armed=false` and move the watcher to `idle`.
 - `delete`: remove the watcher.
+- `show` / `hide`: open or close the menu-bar popover.
 
 These URLs work from tools such as Raycast, BetterTouchTool, Shortcuts, shell
 scripts, and any macOS app that can open URLs.

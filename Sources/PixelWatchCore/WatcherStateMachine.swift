@@ -20,7 +20,7 @@ public struct WatcherStateMachine: Sendable {
   }
 
   public mutating func apply(_ event: PixelWatchEvent) -> WatcherStateTransition {
-    guard event.watcherID == watcherID else {
+    guard event.targetWatcherID == watcherID else {
       return WatcherStateTransition(newState: state)
     }
 
@@ -34,7 +34,8 @@ public struct WatcherStateMachine: Sendable {
       nextState = .idle
     case let .errored(_, message):
       nextState = .errored(message)
-    case .frameCaptured, .diffComputed, .hookStarted, .hookFinished:
+    case .frameCaptured, .diffComputed, .hookStarted, .hookFinished,
+         .popoverShowRequested, .popoverHideRequested:
       nextState = state
     }
 

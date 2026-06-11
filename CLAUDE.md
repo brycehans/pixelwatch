@@ -125,9 +125,11 @@ The `pixelwatch://` scheme is registered through `Sources/pixelwatch/Info.plist`
 open "pixelwatch://arm?id=<UUID>"
 open "pixelwatch://pause?id=<UUID>"
 open "pixelwatch://delete?id=<UUID>"
+open "pixelwatch://show"
+open "pixelwatch://hide"
 ```
 
-`arm` delegates to `WatcherArmService.arm`, `pause` persists `armed=false` and publishes `.paused(reason: .userPaused)`, and `delete` removes the watcher. Use watcher IDs from `~/Library/Application Support/PixelWatch/watchers.json`.
+`arm` delegates to `WatcherArmService.arm`, `pause` persists `armed=false` and publishes `.paused(reason: .userPaused)`, `delete` removes the watcher, and `show` / `hide` open or close the menu-bar popover. Use watcher IDs from `~/Library/Application Support/PixelWatch/watchers.json`.
 
 ## Conventions
 

@@ -36,7 +36,9 @@ public enum CaptureStage {
         case .frameCaptured,
              .diffComputed,
              .hookStarted,
-             .hookFinished:
+             .hookFinished,
+             .popoverShowRequested,
+             .popoverHideRequested:
           break
         }
       }

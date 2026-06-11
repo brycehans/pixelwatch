@@ -146,8 +146,10 @@ public enum PixelWatchEvent: Equatable, Sendable {
   case hookFinished(watcherID: WatcherID, exit: Int32, stdout: String, stderr: String)
   case paused(watcherID: WatcherID, reason: PauseReason)
   case errored(watcherID: WatcherID, message: String)
+  case popoverShowRequested
+  case popoverHideRequested
 
-  public var watcherID: WatcherID {
+  public var targetWatcherID: WatcherID? {
     switch self {
     case let .armed(watcherID, _),
          let .frameCaptured(watcherID, _, _),
@@ -158,7 +160,16 @@ public enum PixelWatchEvent: Equatable, Sendable {
          let .hookFinished(watcherID, _, _, _),
          let .paused(watcherID, _),
          let .errored(watcherID, _):
-      watcherID
+      return watcherID
+    case .popoverShowRequested, .popoverHideRequested:
+      return nil
     }
+  }
+
+  public var watcherID: WatcherID {
+    guard let watcherID = targetWatcherID else {
+      preconditionFailure("PixelWatchEvent \(self) is not watcher-scoped")
+    }
+    return watcherID
   }
 }
