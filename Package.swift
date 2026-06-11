@@ -23,7 +23,8 @@ let package = Package(
     .executableTarget(
       name: "pixelwatch",
       dependencies: ["PixelWatchCore", "PixelWatchAppSupport"],
-      path: "Sources/pixelwatch"
+      path: "Sources/pixelwatch",
+      exclude: ["Info.plist"]
     ),
     .executableTarget(
       name: "pixelwatch-bench",

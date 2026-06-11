@@ -1,4 +1,5 @@
 .build/
+PixelWatch.app/
 .claude/
 .swiftpm/
 *.xcodeproj/

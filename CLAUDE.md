@@ -41,6 +41,7 @@ Sources/
   PixelWatchAppSupport/               # AppKit/SwiftUI surface; depends on Core (@_exported)
     PopoverGridView.swift                              # SwiftUI grid; cells + AddCell + empty state
     PopoverModel.swift                                 # @Observable @MainActor model; WatcherThumbnailItem
+    URLCommandParser.swift                             # pixelwatch:// arm/pause/delete URL parser
     NewWatcherCoordinator.swift                        # focused-window → overlay → sheet → onCreated
     WatcherOverlayController.swift                     # AppKit overlay windows + WatcherOverlaySession protocol
     ConfigureWatcherSheet.swift                        # Configure sheet (name, sensitivity, command, Save vs Save & Arm)
@@ -98,6 +99,8 @@ Capture ── frameCaptured ──► Diff ── diffComputed ──► Decide
 swift build
 swift run pixelwatch                   # debug
 swift build -c release && .build/release/pixelwatch
+make bundle                            # creates/registers PixelWatch.app for pixelwatch:// URLs
+open PixelWatch.app
 
 # Bench CLI
 swift build -c release
@@ -113,6 +116,18 @@ swift test --filter PixelWatchCoreTests.DiffTests/testIdenticalImagesScoreZero  
 Both executables require **Screen Recording TCC** for the terminal/app bundle running them. First launch prompts.
 
 App-private data lives at `~/Library/Application Support/PixelWatch/` (`watchers.json`, `bus.sock`). Listed under `additionalDirectories` in `.claude/settings.local.json` so Read/Write don't require approval.
+
+### URL scheme automation
+
+The `pixelwatch://` scheme is registered through `Sources/pixelwatch/Info.plist`, so URL commands only work after running from the bundle built by `make bundle` / `open PixelWatch.app`. A bare `swift run pixelwatch` process is useful for debugging but is not registered with Launch Services.
+
+```sh
+open "pixelwatch://arm?id=<UUID>"
+open "pixelwatch://pause?id=<UUID>"
+open "pixelwatch://delete?id=<UUID>"
+```
+
+`arm` delegates to `WatcherArmService.arm`, `pause` persists `armed=false` and publishes `.paused(reason: .userPaused)`, and `delete` removes the watcher. Use watcher IDs from `~/Library/Application Support/PixelWatch/watchers.json`.
 
 ## Conventions
 
