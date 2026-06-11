@@ -168,9 +168,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     }
     Task {
       await store.remove(id: id)
-      await MainActor.run {
-        overlayController.remove(watcherID: id)
-      }
+      overlayController.remove(watcherID: id)
       await refreshPopover()
     }
   }
