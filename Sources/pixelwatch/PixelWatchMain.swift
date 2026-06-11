@@ -49,6 +49,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     NSHostingController(rootView: PopoverGridView(
       model: popoverModel,
       onAdd: { [weak self] in self?.newWatcherClicked(nil) },
+      onDelete: { [weak self] id in self?.handleDeleteWatcher(id: id) },
       onQuit: { NSApp.terminate(nil) }
     ))
   }()
@@ -154,6 +155,22 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
         await WatcherArmService.arm(watcherID: watcher.id, bus: bus, store: store)
       }
       overlayController.register(watcherID: watcher.id, for: session)
+      await refreshPopover()
+    }
+  }
+
+  private func handleDeleteWatcher(id: WatcherID) {
+    watchers.removeAll { $0.id == id }
+    do {
+      try persistence.save(watchers)
+    } catch {
+      NSLog("Failed to save after delete: %@", error.localizedDescription)
+    }
+    Task {
+      await store.remove(id: id)
+      await MainActor.run {
+        overlayController.remove(watcherID: id)
+      }
       await refreshPopover()
     }
   }

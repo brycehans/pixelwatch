@@ -10,11 +10,18 @@ private let gridSpacing: CGFloat = 10
 public struct PopoverGridView: View {
   @State var model: PopoverModel
   let onAdd: () -> Void
+  let onDelete: (WatcherID) -> Void
   let onQuit: () -> Void
 
-  public init(model: PopoverModel, onAdd: @escaping () -> Void, onQuit: @escaping () -> Void) {
+  public init(
+    model: PopoverModel,
+    onAdd: @escaping () -> Void,
+    onDelete: @escaping (WatcherID) -> Void,
+    onQuit: @escaping () -> Void
+  ) {
     self.model = model
     self.onAdd = onAdd
+    self.onDelete = onDelete
     self.onQuit = onQuit
   }
 
@@ -26,7 +33,7 @@ public struct PopoverGridView: View {
           spacing: gridSpacing
         ) {
           ForEach(model.items) { item in
-            ThumbnailCellView(item: item)
+            ThumbnailCellView(item: item, onDelete: { onDelete(item.id) })
           }
           AddCellView(onAdd: onAdd)
         }
@@ -59,34 +66,43 @@ public struct PopoverGridView: View {
 
 private struct ThumbnailCellView: View {
   let item: WatcherThumbnailItem
+  let onDelete: () -> Void
 
   var body: some View {
-    VStack(spacing: 0) {
-      // Label strip
-      Text(OverlayAppearance.labelText(for: item.state))
-        .font(.system(size: 11))
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, minHeight: labelHeight, maxHeight: labelHeight)
-        .background(Color.black.opacity(0.65))
+    ZStack(alignment: .topTrailing) {
+      VStack(spacing: 0) {
+        Text(OverlayAppearance.labelText(for: item.state))
+          .font(.system(size: 11))
+          .foregroundStyle(.white)
+          .frame(maxWidth: .infinity, minHeight: labelHeight, maxHeight: labelHeight)
+          .background(Color.black.opacity(0.65))
 
-      // Image area with border
-      ZStack {
-        Color.black
-        if let nsImage = item.latestFrame?.displayImage {
-          Image(nsImage: nsImage)
-            .resizable()
-            .scaledToFill()
-            .clipped()
+        ZStack {
+          Color.black
+          if let nsImage = item.latestFrame?.displayImage {
+            Image(nsImage: nsImage)
+              .resizable()
+              .scaledToFill()
+              .clipped()
+          }
         }
+        .frame(width: cellWidth, height: cellHeight - labelHeight)
+        .overlay(
+          RoundedRectangle(cornerRadius: 0)
+            .strokeBorder(
+              Color(nsColor: OverlayAppearance.borderColor(for: item.state)),
+              lineWidth: borderWidth
+            )
+        )
       }
-      .frame(width: cellWidth, height: cellHeight - labelHeight)
-      .overlay(
-        RoundedRectangle(cornerRadius: 0)
-          .strokeBorder(
-            Color(nsColor: OverlayAppearance.borderColor(for: item.state)),
-            lineWidth: borderWidth
-          )
-      )
+
+      Button(action: onDelete) {
+        Image(systemName: "xmark.circle.fill")
+          .foregroundStyle(.white)
+          .shadow(radius: 1)
+      }
+      .buttonStyle(.plain)
+      .padding(4)
     }
     .frame(width: cellWidth, height: cellHeight)
     .clipShape(RoundedRectangle(cornerRadius: 4))
