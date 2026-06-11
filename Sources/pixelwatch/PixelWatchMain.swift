@@ -231,9 +231,6 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       width: dropSize.width,
       height: dropSize.height
     )
-    let rect = windowRelativeRect(fromScreen: screenRect, windowBounds: bounds)
-    _ = rect  // used by FrozenOverlaySession via overlay.frozenRect in the presenter
-
     let draft = WatcherDraft(
       window: windowSnapshot,
       name: title.isEmpty ? bundleID : title,
