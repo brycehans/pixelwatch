@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 private let dragThreshold: CGFloat = 5
-private let dropSquareSize = CGSize(width: 120, height: 96)
+private let dropSquareSize = CGSize(width: 50, height: 40)
 
 // MARK: - NSViewRepresentable entry point
 
