@@ -128,7 +128,7 @@ public enum HookStage {
     bus: EventBus,
     store: WatcherStore,
     runner: some HookRunning = LiveHookRunner(),
-    poster: some NotificationPosting = UNNotificationPoster(),
+    poster: some NotificationPosting = NotificationPoster(),
     timeout: TimeInterval = 30
   ) -> Task<Void, Never> {
     Task {

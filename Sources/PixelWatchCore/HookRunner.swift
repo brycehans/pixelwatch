@@ -1,6 +1,5 @@
 import Darwin
 import Foundation
-import UserNotifications
 
 public struct HookResult: Equatable, Sendable {
   public let exit: Int32
@@ -206,17 +205,13 @@ public protocol NotificationPosting: Sendable {
   func post(body: String, identifier: String) async
 }
 
-public final class UNNotificationPoster: NotificationPosting, Sendable {
+public final class NotificationPoster: NotificationPosting, Sendable {
   public init() {}
 
   public func post(body: String, identifier: String) async {
-    // UNUserNotificationCenter.current() crashes without a proper .app bundle
-    // (e.g. swift run). Skip silently in that case.
-    guard Bundle.main.bundleURL.pathExtension == "app" else { return }
-    let content = UNMutableNotificationContent()
-    content.title = "PixelWatch"
-    content.body = body
-    let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-    try? await UNUserNotificationCenter.current().add(request)
+    // Single-quote–safe shell embedding: replace ' with '\''
+    let escaped = body.replacingOccurrences(of: "'", with: "'\\''")
+    let cmd = "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title \"PixelWatch\"' -e 'end run' '\(escaped)'"
+    _ = await HookRunner.run(command: cmd, env: [:], timeout: 5)
   }
 }

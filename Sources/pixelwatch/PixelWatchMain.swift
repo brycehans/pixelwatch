@@ -3,7 +3,6 @@ import Foundation
 import PixelWatchAppSupport
 import PixelWatchCore
 import SwiftUI
-import UserNotifications
 
 @main
 enum PixelWatchMain {
@@ -88,9 +87,6 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     statusItem?.button?.target = self
     startRuntime()
     startSyncTimer()
-    if Bundle.main.bundleURL.pathExtension == "app" {
-      Task { try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) }
-    }
     Task { await self.refreshPopover() }
 
     // Start the debug socket unconditionally.
