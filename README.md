@@ -1,5 +1,7 @@
 # PixelWatch
 
+https://github.com/user-attachments/assets/66f02c05-9039-4eac-92c9-5e07cc9fa1ff
+
 --------
 
 A tiny Mac app that watches a rectangle inside another app's
@@ -8,7 +10,8 @@ window and pings when the pixels change. A ping can post an OS notification, or 
 This makes it useful for watching CI badges, dashboards, queues, build status panels, 
 or any visual state that does not already have a better API.
 
-https://github.com/user-attachments/assets/66f02c05-9039-4eac-92c9-5e07cc9fa1ff
+Use it in Agentic workflows to be notified of state changes in external systems,
+or pass the resulting screenshot into an OCR or vLLM to diff the old and new content.
 
 ## Requirements
 
