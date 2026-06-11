@@ -49,6 +49,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     NSHostingController(rootView: PopoverGridView(
       model: popoverModel,
       onDelete: { [weak self] id in self?.handleDeleteWatcher(id: id) },
+      onArm: { [weak self] id in self?.handleArmWatcher(id: id) },
       onDrop: { [weak self] point in self?.handleDrop(at: point) },
       onDragStarted: { [weak self] in self?.popover.behavior = .applicationDefined },
       onQuit: { NSApp.terminate(nil) }
@@ -159,6 +160,12 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       }
       overlayController.register(watcherID: watcher.id, for: session)
       await refreshPopover()
+    }
+  }
+
+  private func handleArmWatcher(id: WatcherID) {
+    Task {
+      await WatcherArmService.arm(watcherID: id, bus: bus, store: store)
     }
   }
 

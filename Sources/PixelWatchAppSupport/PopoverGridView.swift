@@ -10,6 +10,7 @@ private let gridSpacing: CGFloat = 10
 public struct PopoverGridView: View {
   @State var model: PopoverModel
   let onDelete: (WatcherID) -> Void
+  let onArm: (WatcherID) -> Void
   let onDrop: @MainActor (CGPoint) -> Void
   let onDragStarted: @MainActor () -> Void
   let onQuit: () -> Void
@@ -17,12 +18,14 @@ public struct PopoverGridView: View {
   public init(
     model: PopoverModel,
     onDelete: @escaping (WatcherID) -> Void,
+    onArm: @escaping (WatcherID) -> Void,
     onDrop: @escaping @MainActor (CGPoint) -> Void,
     onDragStarted: @escaping @MainActor () -> Void = {},
     onQuit: @escaping () -> Void
   ) {
     self.model = model
     self.onDelete = onDelete
+    self.onArm = onArm
     self.onDrop = onDrop
     self.onDragStarted = onDragStarted
     self.onQuit = onQuit
@@ -90,10 +93,10 @@ private struct ThumbnailCellView: View {
             Image(nsImage: nsImage)
               .resizable()
               .scaledToFill()
-              .clipped()
           }
         }
         .frame(width: cellWidth, height: cellHeight - labelHeight)
+        .clipped()
         .overlay(
           RoundedRectangle(cornerRadius: 0)
             .strokeBorder(
