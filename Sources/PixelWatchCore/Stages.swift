@@ -128,6 +128,7 @@ public enum HookStage {
     bus: EventBus,
     store: WatcherStore,
     runner: some HookRunning = LiveHookRunner(),
+    poster: some NotificationPosting = UNNotificationPoster(),
     timeout: TimeInterval = 30
   ) -> Task<Void, Never> {
     Task {
@@ -136,22 +137,35 @@ public enum HookStage {
         guard let fire = await FireContext(event: event, store: store) else {
           continue
         }
-        await bus.publish(.hookStarted(
-          watcherID: fire.watcher.id,
-          command: fire.watcher.command,
-          reason: fire.reason
-        ))
-        let result = await runner.run(
-          command: fire.watcher.command,
-          env: fire.env,
-          timeout: timeout
-        )
-        await bus.publish(.hookFinished(
-          watcherID: fire.watcher.id,
-          exit: result.exit,
-          stdout: result.stdout,
-          stderr: result.stderr
-        ))
+        switch fire.watcher.commandMode {
+        case .shell(let cmd):
+          await bus.publish(.hookStarted(
+            watcherID: fire.watcher.id,
+            command: cmd,
+            reason: fire.reason
+          ))
+          let result = await runner.run(command: cmd, env: fire.env, timeout: timeout)
+          await bus.publish(.hookFinished(
+            watcherID: fire.watcher.id,
+            exit: result.exit,
+            stdout: result.stdout,
+            stderr: result.stderr
+          ))
+        case .notification(let body):
+          await bus.publish(.hookStarted(
+            watcherID: fire.watcher.id,
+            command: "[notification] \(body)",
+            reason: fire.reason
+          ))
+          let id = "\(fire.watcher.id.uuidString)-\(fire.reason.environmentValue)"
+          await poster.post(body: body, identifier: id)
+          await bus.publish(.hookFinished(
+            watcherID: fire.watcher.id,
+            exit: 0,
+            stdout: "",
+            stderr: ""
+          ))
+        }
       }
     }
   }

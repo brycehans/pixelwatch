@@ -13,7 +13,7 @@ final class HookStageTests: XCTestCase {
       rect: CGRect(x: 1, y: 2, width: 30, height: 40),
       sensitivity: 0.7,
       tickIntervalSeconds: 1,
-      command: "notify \"$WATCH_WINDOW_TITLE\"",
+      commandMode: .shell(command: "notify \"$WATCH_WINDOW_TITLE\""),
       armed: false
     )
     let frame = PixelBuffer(width: 1, height: 1, linearRGB: [1, 1, 1])
@@ -42,7 +42,7 @@ final class HookStageTests: XCTestCase {
       return XCTFail("expected hookStarted")
     }
     XCTAssertEqual(startedID, watcher.id)
-    XCTAssertEqual(command, watcher.command)
+    XCTAssertEqual(command, "notify \"$WATCH_WINDOW_TITLE\"")
     XCTAssertEqual(reason, .pixelChange)
 
     guard case let .hookFinished(finishedID, exit, stdout, stderr) = finished else {
@@ -53,7 +53,7 @@ final class HookStageTests: XCTestCase {
     XCTAssertEqual(stdout, "out")
     XCTAssertEqual(stderr, "err")
 
-    XCTAssertEqual(invocation?.command, watcher.command)
+    XCTAssertEqual(invocation?.command, "notify \"$WATCH_WINDOW_TITLE\"")
     XCTAssertNil(invocation?.env["WATCH_NAME"])
     XCTAssertEqual(invocation?.env["WATCH_WINDOW_TITLE"], "Builds")
     XCTAssertEqual(invocation?.env["WATCH_WINDOW_APP"], "com.example.ci")
@@ -95,6 +95,67 @@ final class HookStageTests: XCTestCase {
     XCTAssertEqual(invocation?.env["WATCH_REASON"], "app-quit")
     XCTAssertEqual(invocation?.env["WATCH_SCORE"], "0")
     XCTAssertEqual(invocation?.env["WATCH_THRESHOLD"], "")
+  }
+
+  func testNotificationModePostsAndPublishesLifecycleEvents() async {
+    let bus = EventBus()
+    let store = WatcherStore(bus: bus)
+    let runner = RecordingHookRunner(result: HookResult(exit: 0, stdout: "", stderr: "", timedOut: false))
+    let poster = RecordingNotificationPoster()
+    let watcher = Watcher(
+      id: UUID(),
+      target: WindowBinding(bundleID: "com.example.ci", titleMatch: .exact("Builds")),
+      rect: CGRect(x: 0, y: 0, width: 10, height: 10),
+      sensitivity: 0.5,
+      tickIntervalSeconds: 1,
+      commandMode: .notification(body: "Build done"),
+      armed: false
+    )
+    let frame = PixelBuffer(width: 1, height: 1, linearRGB: [1, 1, 1])
+
+    await store.add(watcher)
+    await store.start()
+    let hookTask = HookStage.start(bus: bus, store: store, runner: runner, poster: poster)
+    let events = await EventReader(stream: bus.subscribe())
+    await events.start()
+    await waitUntil { await bus.subscriberCount == 3 }
+    defer { hookTask.cancel() }
+
+    await bus.publish(.thresholdExceeded(watcherID: watcher.id, score: 0.9, frame: frame))
+
+    let started = await events.next { if case .hookStarted = $0 { return true }; return false }
+    let finished = await events.next { if case .hookFinished = $0 { return true }; return false }
+
+    guard case let .hookStarted(startedID, command, reason) = started else {
+      return XCTFail("expected hookStarted")
+    }
+    XCTAssertEqual(startedID, watcher.id)
+    XCTAssertEqual(command, "[notification] Build done")
+    XCTAssertEqual(reason, .pixelChange)
+
+    guard case let .hookFinished(finishedID, exit, stdout, stderr) = finished else {
+      return XCTFail("expected hookFinished")
+    }
+    XCTAssertEqual(finishedID, watcher.id)
+    XCTAssertEqual(exit, 0)
+    XCTAssertEqual(stdout, "")
+    XCTAssertEqual(stderr, "")
+
+    let invocations = await runner.invocations
+    XCTAssertTrue(invocations.isEmpty, "shell runner must not be called for notification mode")
+
+    let posts = await poster.posted
+    XCTAssertEqual(posts.count, 1)
+    XCTAssertEqual(posts[0].body, "Build done")
+    XCTAssertEqual(posts[0].identifier, "\(watcher.id.uuidString)-pixel-change")
+  }
+}
+
+private actor RecordingNotificationPoster: NotificationPosting {
+  private(set) var posted: [(body: String, identifier: String)] = []
+
+  func post(body: String, identifier: String) async {
+    posted.append((body: body, identifier: identifier))
   }
 }
 

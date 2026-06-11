@@ -3,6 +3,7 @@ import Foundation
 import PixelWatchAppSupport
 import PixelWatchCore
 import SwiftUI
+import UserNotifications
 
 @main
 enum PixelWatchMain {
@@ -87,6 +88,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     statusItem?.button?.target = self
     startRuntime()
     startSyncTimer()
+    Task { try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) }
     Task { await self.refreshPopover() }
 
     // Start the debug socket unconditionally.
@@ -296,7 +298,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     let draft = WatcherDraft(
       window: windowSnapshot,
       sensitivity: 0.5,
-      command: "",
+      commandMode: .notification(body: "Change found on \(windowSnapshot.title)"),
       armed: false
     )
 

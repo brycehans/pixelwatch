@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import UserNotifications
 
 public struct HookResult: Equatable, Sendable {
   public let exit: Int32
@@ -196,5 +197,23 @@ private actor OutputCapture {
       }
     }
     return String(decoding: buffer, as: UTF8.self)
+  }
+}
+
+// MARK: - NotificationPosting
+
+public protocol NotificationPosting: Sendable {
+  func post(body: String, identifier: String) async
+}
+
+public final class UNNotificationPoster: NotificationPosting, Sendable {
+  public init() {}
+
+  public func post(body: String, identifier: String) async {
+    let content = UNMutableNotificationContent()
+    content.title = "PixelWatch"
+    content.body = body
+    let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+    try? await UNUserNotificationCenter.current().add(request)
   }
 }

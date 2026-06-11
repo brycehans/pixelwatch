@@ -9,7 +9,7 @@ func makeWatcher(sensitivity: Double) -> Watcher {
     rect: CGRect(x: 0, y: 0, width: 10, height: 10),
     sensitivity: sensitivity,
     tickIntervalSeconds: 1,
-    command: "true",
+    commandMode: .shell(command: "true"),
     armed: false
   )
 }

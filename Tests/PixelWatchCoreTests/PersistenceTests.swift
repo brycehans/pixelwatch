@@ -19,7 +19,7 @@ final class PersistenceTests: XCTestCase {
         rect: CGRect(x: 1, y: 2, width: 30, height: 40),
         sensitivity: 0.7,
         tickIntervalSeconds: 1,
-        command: "notify",
+        commandMode: .shell(command: "notify"),
         armed: true
       ),
       Watcher(
@@ -28,7 +28,7 @@ final class PersistenceTests: XCTestCase {
         rect: CGRect(x: 5, y: 6, width: 7, height: 8),
         sensitivity: 0.4,
         tickIntervalSeconds: 5,
-        command: "echo changed",
+        commandMode: .shell(command: "echo changed"),
         armed: false
       ),
     ]
@@ -76,6 +76,38 @@ final class PersistenceTests: XCTestCase {
     XCTAssertEqual(loaded[0].target.bundleID, "com.example")
   }
 
+  func testSaveAndLoadNotificationModeRoundTrips() throws {
+    let directory = try makeTemporaryDirectory()
+    let persistence = WatcherPersistence(url: directory.appendingPathComponent("watchers.json"))
+    let watcher = Watcher(
+      id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
+      target: WindowBinding(bundleID: "com.example", titleMatch: .exact("Window")),
+      rect: CGRect(x: 0, y: 0, width: 10, height: 10),
+      sensitivity: 0.5,
+      tickIntervalSeconds: 1,
+      commandMode: .notification(body: "Change found on Window"),
+      armed: false
+    )
+    try persistence.save([watcher])
+    XCTAssertEqual(try persistence.load(), [watcher])
+  }
+
+  func testLoadLegacyCommandStringMigratesToShellMode() throws {
+    let directory = try makeTemporaryDirectory()
+    let url = directory.appendingPathComponent("watchers.json")
+    let json = """
+    [{"id":"11111111-1111-1111-1111-111111111111",\
+    "target":{"bundleID":"com.example","titleMatch":{"exact":{"_0":"Window"}},\
+    "windowIDHint":null,"lastKnownBounds":null},\
+    "rect":[[0,0],[10,10]],\
+    "sensitivity":0.5,"tickIntervalSeconds":1,"command":"true","armed":false}]
+    """
+    try json.write(to: url, atomically: true, encoding: .utf8)
+    let loaded = try WatcherPersistence(url: url).load()
+    XCTAssertEqual(loaded.count, 1)
+    XCTAssertEqual(loaded[0].commandMode, .shell(command: "true"))
+  }
+
   private func makeTemporaryDirectory() throws -> URL {
     let url = FileManager.default.temporaryDirectory
       .appendingPathComponent("PixelWatchTests-\(UUID().uuidString)", isDirectory: true)
@@ -90,7 +122,7 @@ final class PersistenceTests: XCTestCase {
       rect: CGRect(x: 0, y: 0, width: 10, height: 10),
       sensitivity: 0.7,
       tickIntervalSeconds: 1,
-      command: "true",
+      commandMode: .shell(command: "true"),
       armed: armed
     )
   }

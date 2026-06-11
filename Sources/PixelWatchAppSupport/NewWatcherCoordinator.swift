@@ -38,18 +38,18 @@ public func windowRelativeRect(fromScreen rect: CGRect, windowBounds: CGRect) ->
 public struct WatcherDraft: Sendable {
   public var window: WindowSnapshot
   public var sensitivity: Double
-  public var command: String
+  public var commandMode: CommandMode
   public var armed: Bool
 
   public init(
     window: WindowSnapshot,
     sensitivity: Double,
-    command: String,
+    commandMode: CommandMode,
     armed: Bool
   ) {
     self.window = window
     self.sensitivity = sensitivity
-    self.command = command
+    self.commandMode = commandMode
     self.armed = armed
   }
 }
@@ -97,7 +97,7 @@ public final class NewWatcherCoordinator {
     let draft = WatcherDraft(
       window: snapshot,
       sensitivity: 0.5,
-      command: "",
+      commandMode: .notification(body: "Change found on \(snapshot.title)"),
       armed: false
     )
 

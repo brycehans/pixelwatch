@@ -5,22 +5,35 @@ import SwiftUI
 
 // MARK: - SwiftUI sheet view
 
-/// V1 configure-watcher sheet. Exposes sensitivity and command, and
-/// two action buttons: Save (armed=false) and Save & Arm (armed=true).
+/// Configure-watcher sheet. Segmented picker selects notification vs shell-command
+/// mode; the text field below adapts to whichever mode is active.
 struct ConfigureWatcherSheetView: View {
-  @State private var sensitivity: Double
-  @State private var command: String
+  private enum UIMode { case notification, shell }
 
-  let onSave: (Double, String, Bool) -> Void
+  @State private var sensitivity: Double
+  @State private var mode: UIMode
+  @State private var notificationBody: String
+  @State private var shellCommand: String
+
+  let onSave: (Double, CommandMode, Bool) -> Void
   let onCancel: () -> Void
 
   init(
     draft: WatcherDraft,
-    onSave: @escaping (Double, String, Bool) -> Void,
+    onSave: @escaping (Double, CommandMode, Bool) -> Void,
     onCancel: @escaping () -> Void
   ) {
     _sensitivity = State(initialValue: draft.sensitivity)
-    _command = State(initialValue: draft.command)
+    switch draft.commandMode {
+    case .notification(let body):
+      _mode = State(initialValue: .notification)
+      _notificationBody = State(initialValue: body)
+      _shellCommand = State(initialValue: "")
+    case .shell(let cmd):
+      _mode = State(initialValue: .shell)
+      _notificationBody = State(initialValue: "")
+      _shellCommand = State(initialValue: cmd)
+    }
     self.onSave = onSave
     self.onCancel = onCancel
   }
@@ -35,30 +48,38 @@ struct ConfigureWatcherSheetView: View {
           Text("Sensitivity: \(String(format: "%.2f", sensitivity))")
           Slider(value: $sensitivity, in: 0...1)
         }
-        TextField("Command", text: $command)
+        Picker("When it fires", selection: $mode) {
+          Text("Notification").tag(UIMode.notification)
+          Text("Run a command").tag(UIMode.shell)
+        }
+        .pickerStyle(.segmented)
+        switch mode {
+        case .notification:
+          TextField("Message", text: $notificationBody)
+        case .shell:
+          TextField("Command", text: $shellCommand)
+        }
       }
 
       HStack {
-        Button("Cancel") {
-          onCancel()
-        }
-        .keyboardShortcut(.escape, modifiers: [])
-
+        Button("Cancel") { onCancel() }
+          .keyboardShortcut(.escape, modifiers: [])
         Spacer()
-
-        Button("Save") {
-          onSave(sensitivity, command, false)
-        }
-        .keyboardShortcut(.return, modifiers: [])
-
-        Button("Save & Arm") {
-          onSave(sensitivity, command, true)
-        }
-        .keyboardShortcut(.return, modifiers: [.command])
+        Button("Save") { onSave(sensitivity, assembledMode, false) }
+          .keyboardShortcut(.return, modifiers: [])
+        Button("Save & Arm") { onSave(sensitivity, assembledMode, true) }
+          .keyboardShortcut(.return, modifiers: [.command])
       }
     }
     .padding(20)
     .frame(width: 400)
+  }
+
+  private var assembledMode: CommandMode {
+    switch mode {
+    case .notification: .notification(body: notificationBody)
+    case .shell: .shell(command: shellCommand)
+    }
   }
 }
 
@@ -88,7 +109,7 @@ public final class AppKitConfigureWatcherSheetPresenter: ConfigureWatcherSheetPr
 
       var resumed = false
 
-      let save: (Double, String, Bool) -> Void = { [weak panel] sensitivity, command, armed in
+      let save: (Double, CommandMode, Bool) -> Void = { [weak panel] sensitivity, commandMode, armed in
         guard !resumed else { return }
         resumed = true
         panel?.close()
@@ -108,7 +129,7 @@ public final class AppKitConfigureWatcherSheetPresenter: ConfigureWatcherSheetPr
           rect: rect,
           sensitivity: sensitivity,
           tickIntervalSeconds: 1.0,
-          command: command,
+          commandMode: commandMode,
           armed: armed
         )
         continuation.resume(returning: watcher)

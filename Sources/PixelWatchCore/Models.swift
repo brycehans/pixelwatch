@@ -3,13 +3,25 @@ import Foundation
 
 public typealias WatcherID = UUID
 
-public struct Watcher: Codable, Equatable, Sendable {
+public enum CommandMode: Codable, Equatable, Sendable {
+  case shell(command: String)
+  case notification(body: String)
+
+  public var displayString: String {
+    switch self {
+    case .shell(let cmd): return cmd
+    case .notification(let body): return "[notification] \(body)"
+    }
+  }
+}
+
+public struct Watcher: Equatable, Sendable {
   public let id: WatcherID
   public var target: WindowBinding
   public var rect: CGRect
   public var sensitivity: Double
   public var tickIntervalSeconds: Double
-  public var command: String
+  public var commandMode: CommandMode
   public var armed: Bool
 
   public init(
@@ -18,7 +30,7 @@ public struct Watcher: Codable, Equatable, Sendable {
     rect: CGRect,
     sensitivity: Double,
     tickIntervalSeconds: Double,
-    command: String,
+    commandMode: CommandMode,
     armed: Bool
   ) {
     self.id = id
@@ -26,8 +38,43 @@ public struct Watcher: Codable, Equatable, Sendable {
     self.rect = rect
     self.sensitivity = sensitivity
     self.tickIntervalSeconds = tickIntervalSeconds
-    self.command = command
+    self.commandMode = commandMode
     self.armed = armed
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, target, rect, sensitivity, tickIntervalSeconds, armed
+    case commandMode
+    case command // legacy key — decode only
+  }
+}
+
+extension Watcher: Codable {
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(WatcherID.self, forKey: .id)
+    target = try c.decode(WindowBinding.self, forKey: .target)
+    rect = try c.decode(CGRect.self, forKey: .rect)
+    sensitivity = try c.decode(Double.self, forKey: .sensitivity)
+    tickIntervalSeconds = try c.decode(Double.self, forKey: .tickIntervalSeconds)
+    armed = try c.decode(Bool.self, forKey: .armed)
+    if let mode = try c.decodeIfPresent(CommandMode.self, forKey: .commandMode) {
+      commandMode = mode
+    } else {
+      let cmd = (try c.decodeIfPresent(String.self, forKey: .command)) ?? ""
+      commandMode = .shell(command: cmd)
+    }
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(target, forKey: .target)
+    try c.encode(rect, forKey: .rect)
+    try c.encode(sensitivity, forKey: .sensitivity)
+    try c.encode(tickIntervalSeconds, forKey: .tickIntervalSeconds)
+    try c.encode(armed, forKey: .armed)
+    try c.encode(commandMode, forKey: .commandMode)
   }
 }
 
