@@ -86,6 +86,14 @@ final class DragSourceNSView: NSView {
     dragStartPoint = nil
   }
 
+  override func keyDown(with event: NSEvent) {
+    guard event.keyCode == 53, isDragging else {
+      super.keyDown(with: event)
+      return
+    }
+    cancelDrag()
+  }
+
   private func startDrag() {
     isDragging = true
     needsDisplay = true  // blank the in-grid cell; floating panel becomes the square
@@ -122,6 +130,20 @@ final class DragSourceNSView: NSView {
       NSLog("[DRAG] endDrag: already not dragging, returning")
       return
     }
+    finishDrag()
+
+    NSLog("[DRAG] closing floatingPanel, then calling onDrop at %@", NSStringFromPoint(screenPoint))
+    onDrop(screenPoint)
+    NSLog("[DRAG] onDrop returned")
+  }
+
+  private func cancelDrag() {
+    NSLog("[DRAG] cancelDrag isDragging=%d", isDragging ? 1 : 0)
+    guard isDragging else { return }
+    finishDrag()
+  }
+
+  private func finishDrag() {
     isDragging = false
     dragStartPoint = nil
 
@@ -133,24 +155,21 @@ final class DragSourceNSView: NSView {
       mouseUpMonitor = nil
     }
 
-    NSLog("[DRAG] closing floatingPanel, then calling onDrop at %@", NSStringFromPoint(screenPoint))
     floatingPanel?.close()
     floatingPanel = nil
 
     needsDisplay = true  // restore the in-grid cell
-    onDrop(screenPoint)
-    NSLog("[DRAG] onDrop returned")
   }
 
   private func showFloatingPanel(at origin: CGPoint) {
-    let panel = NSPanel(
+    let panel = DragFloatPanel(
       contentRect: NSRect(
         x: origin.x - dropSquareSize.width / 2,
         y: origin.y - dropSquareSize.height / 2,
         width: dropSquareSize.width,
         height: dropSquareSize.height
       ),
-      styleMask: [.borderless, .nonactivatingPanel],
+      styleMask: [.borderless],
       backing: .buffered,
       defer: false
     )
@@ -161,8 +180,11 @@ final class DragSourceNSView: NSView {
     panel.isReleasedWhenClosed = false
 
     let contentView = DragFloatVisualView(frame: NSRect(origin: .zero, size: dropSquareSize))
+    contentView.onCancel = { [weak self] in self?.cancelDrag() }
     panel.contentView = contentView
-    panel.orderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+    panel.makeKeyAndOrderFront(nil)
+    panel.makeFirstResponder(contentView)
     floatingPanel = panel
   }
 }
@@ -170,7 +192,25 @@ final class DragSourceNSView: NSView {
 // MARK: - Floating panel visual
 
 @MainActor
+private final class DragFloatPanel: NSPanel {
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { false }
+}
+
+@MainActor
 private final class DragFloatVisualView: NSView {
+  var onCancel: @MainActor () -> Void = {}
+
+  override var acceptsFirstResponder: Bool { true }
+
+  override func keyDown(with event: NSEvent) {
+    guard event.keyCode == 53 else {
+      super.keyDown(with: event)
+      return
+    }
+    onCancel()
+  }
+
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
     let inset = bounds.insetBy(dx: 2, dy: 2)

@@ -51,7 +51,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       onDelete: { [weak self] id in self?.handleDeleteWatcher(id: id) },
       onArm: { [weak self] id in self?.handleArmWatcher(id: id) },
       onDrop: { [weak self] point in self?.handleDrop(at: point) },
-      onDragStarted: { [weak self] in self?.popover.behavior = .applicationDefined },
+      onDragStarted: { [weak self] in self?.handleDragStarted() },
       onQuit: { NSApp.terminate(nil) }
     ))
   }()
@@ -197,6 +197,11 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     Task {
       await bus.publish(.paused(watcherID: id, reason: .userPaused))
     }
+  }
+
+  private func handleDragStarted() {
+    popover.behavior = .applicationDefined
+    popover.performClose(nil)
   }
 
   private func handleDeleteWatcher(id: WatcherID) {
