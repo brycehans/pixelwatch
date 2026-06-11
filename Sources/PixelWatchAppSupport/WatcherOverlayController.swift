@@ -145,7 +145,7 @@ final class DefaultWatcherOverlaySession: WatcherOverlaySession {
 /// height of the screen the rect lives on.
 ///
 /// The controller composes frames in TL terms ("cursor at the bottom-right of
-/// the 100×100 square") because `tick()` math reads naturally that way; AppKit's
+/// the overlay rect") because `tick()` math reads naturally that way; AppKit's
 /// NSWindow.setFrame wants BL. This is the single point of conversion.
 func screenBottomLeftRect(fromTopLeft frame: CGRect, screenHeight: CGFloat) -> CGRect {
   CGRect(
@@ -268,7 +268,7 @@ private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlay
 ///
 /// Lifecycle:
 /// 1. Call `begin(windowID:)` when the user triggers "new watcher" — the controller
-///    creates a 100×100 overlay anchored below-left of the cursor and returns a session.
+///    creates a 50×40 overlay anchored below-left of the cursor and returns a session.
 /// 2. The caller (or the live overlay's mouse-tracking) calls `session.freeze()` to
 ///    lock in the rect.
 /// 3. Call `update(watcherID:state:)` whenever watcher state changes to repaint the
