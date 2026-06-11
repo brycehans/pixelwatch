@@ -30,7 +30,7 @@ final class WatcherStoreTests: XCTestCase {
   func testRemoveDeletesSnapshot() async {
     let bus = EventBus()
     let store = WatcherStore(bus: bus)
-    let watcher = makeWatcher(sensitivity: 0.5)
+    let watcher = makeWatcher(sensitivity: 1)
     await store.add(watcher)
     let before = await store.snapshot(for: watcher.id)
     XCTAssertNotNil(before)
