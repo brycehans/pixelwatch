@@ -35,17 +35,35 @@ final class CGWindowCandidateProviderTests: XCTestCase {
 
     XCTAssertNil(CGWindowCandidateParser.parse(removing(.number, from: valid), bundleIdentifierForProcessID: { _ in "com.example" }))
     XCTAssertNil(CGWindowCandidateParser.parse(removing(.ownerPID, from: valid), bundleIdentifierForProcessID: { _ in "com.example" }))
-    XCTAssertNil(CGWindowCandidateParser.parse(removing(.name, from: valid), bundleIdentifierForProcessID: { _ in "com.example" }))
     XCTAssertNil(CGWindowCandidateParser.parse(removing(.bounds, from: valid), bundleIdentifierForProcessID: { _ in "com.example" }))
     XCTAssertNil(CGWindowCandidateParser.parse(valid, bundleIdentifierForProcessID: { _ in nil }))
   }
 
+  func testParserTreatsMissingWindowNameAsEmptyTitle() {
+    let info = removing(.name, from: windowInfo(windowID: 7, processID: 70, title: "Hidden"))
+
+    let candidate = CGWindowCandidateParser.parse(
+      info,
+      bundleIdentifierForProcessID: { _ in "com.example.Untitled" }
+    )
+
+    XCTAssertEqual(
+      candidate,
+      WindowCandidate(
+        windowID: 7,
+        bundleID: "com.example.Untitled",
+        title: "",
+        bounds: CGRect(x: 0, y: 0, width: 100, height: 100)
+      )
+    )
+  }
+
   func testProviderMapsAndFiltersWindowInfoDictionaries() {
     let included = windowInfo(windowID: 1, processID: 10, title: "Included")
-    let missingTitle = removing(.name, from: windowInfo(windowID: 2, processID: 20, title: "Missing"))
+    let missingBundleID = windowInfo(windowID: 2, processID: 20, title: "Missing")
 
     let provider = CGWindowCandidateProvider(
-      windowInfo: { [included, missingTitle] },
+      windowInfo: { [included, missingBundleID] },
       bundleIdentifierForProcessID: { pid in
         pid == 10 ? "com.example.Included" : nil
       }

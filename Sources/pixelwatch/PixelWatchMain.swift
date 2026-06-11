@@ -237,7 +237,6 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
 
     let ownPID = ProcessInfo.processInfo.processIdentifier
     NSLog("[DROP] ownPID=%d", ownPID)
-    var targetInfo: [String: Any]?
     for (idx, info) in list.enumerated() {
       let owner = info[String(kCGWindowOwnerName)] as? String ?? "?"
       let layer = (info[String(kCGWindowLayer)] as? NSNumber)?.intValue ?? -999
@@ -268,10 +267,6 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
         NSLog("[DROP] [%02d] SKIP: pid=%d == ownPID", idx, pid)
         continue
       }
-      guard let windowTitle, !windowTitle.isEmpty else {
-        NSLog("[DROP] [%02d] SKIP: title nil or empty", idx)
-        continue
-      }
       guard let bounds else {
         NSLog("[DROP] [%02d] SKIP: bounds nil", idx)
         continue
@@ -280,38 +275,34 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
         NSLog("[DROP] [%02d] SKIP: bounds %@ does not contain %@", idx, NSStringFromRect(bounds), NSStringFromPoint(cgPoint))
         continue
       }
-      NSLog("[DROP] [%02d] MATCH: owner='%@' pid=%d title='%@'", idx, owner, pid, windowTitle)
-      targetInfo = info
+      NSLog("[DROP] [%02d] MATCH: owner='%@' pid=%d title='%@'", idx, owner, pid, windowTitle ?? "")
       break
     }
-    NSLog("[DROP] loop done, targetInfo owner='%@'",
-          targetInfo?[String(kCGWindowOwnerName)] as? String ?? "nil (no match)")
 
-    guard
-      let info = targetInfo,
-      let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]),
-      let windowID = CGWindowDictParser.uint32Value(info[String(kCGWindowNumber)]),
-      let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)])
-    else {
+    let resolver = DropTargetResolver(
+      ownProcessID: ownPID,
+      bundleIdentifierForProcessID: { processID in
+        NSRunningApplication(processIdentifier: processID)?.bundleIdentifier
+      }
+    )
+
+    guard let windowSnapshot = resolver.resolve(
+      appKitDropPoint: appKitPoint,
+      screenHeight: screenHeight,
+      windowInfo: list
+    ) else {
       NSLog("[DROP] second guard FAILED — firing alert")
       let alert = NSAlert()
       alert.messageText = "PixelWatch could not find a window at that location."
       alert.runModal()
       return
     }
-    NSLog("[DROP] second guard passed: windowID=%u pid=%d bounds=%@", windowID, pid, NSStringFromRect(bounds))
-
-    let title = (info[String(kCGWindowName)] as? String) ?? ""
-    let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
-
-    let windowSnapshot = WindowSnapshot(
-      windowID: windowID,
-      processID: pid,
-      bundleID: bundleID,
-      title: title,
-      bounds: bounds,
-      isVisible: true
-    )
+    let bounds = windowSnapshot.bounds
+    let windowID = windowSnapshot.windowID
+    NSLog("[DROP] second guard passed: windowID=%u pid=%d bounds=%@",
+          windowSnapshot.windowID,
+          windowSnapshot.processID,
+          NSStringFromRect(windowSnapshot.bounds))
 
     // Match the size of the floating drag panel exactly so the overlay lands where the
     // square was dropped. Clamp so the rect stays within the window bounds.

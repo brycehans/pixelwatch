@@ -55,11 +55,11 @@ enum CGWindowCandidateParser {
   ) -> WindowCandidate? {
     guard let windowID = CGWindowDictParser.uint32Value(info[String(kCGWindowNumber)]),
           let processID = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)]),
-          let title = info[String(kCGWindowName)] as? String,
           let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]),
           let bundleID = bundleIdentifierForProcessID(processID) else {
       return nil
     }
+    let title = (info[String(kCGWindowName)] as? String) ?? ""
 
     return WindowCandidate(
       windowID: windowID,
