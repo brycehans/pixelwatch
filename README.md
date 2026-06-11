@@ -1,18 +1,14 @@
 # PixelWatch
 
-A tiny Mac app to setup visual-diff triggers on any window (even for windows in the background). When the pixels change, fire a notification or run a shell command.
+--------
+
+A tiny Mac app that watches a rectangle inside another app's
+window and pings when the pixels change. A ping can post an OS notification, or run a shell command.
+
+This makes it useful for watching CI badges, dashboards, queues, build status panels, 
+or any visual state that does not already have a better API.
 
 https://github.com/user-attachments/assets/66f02c05-9039-4eac-92c9-5e07cc9fa1ff
-
-PixelWatch is a macOS menu-bar app that watches a rectangle inside another app's
-window and fires when the pixels change. A fire can post a PixelWatch
-notification or run a shell command, which makes it useful for watching CI
-badges, dashboards, queues, build status panels, or any visual state that does
-not already have a better API.
-
-PixelWatch is intentionally one-shot: after a watcher fires, it moves to
-`triggered` and waits for you to arm it again. That avoids notification storms
-when a watched indicator stays changed.
 
 ## Requirements
 
