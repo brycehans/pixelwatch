@@ -83,6 +83,15 @@ public enum PauseReason: String, Codable, Equatable, Sendable {
   case userPaused
 }
 
+public extension TitleMatch {
+  var literalValue: String {
+    switch self {
+    case let .exact(value), let .contains(value), let .regex(value):
+      value
+    }
+  }
+}
+
 public enum PixelWatchEvent: Equatable, Sendable {
   case armed(watcherID: WatcherID, baseline: PixelBuffer)
   case frameCaptured(watcherID: WatcherID, frame: PixelBuffer, at: Date)

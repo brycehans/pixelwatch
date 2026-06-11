@@ -229,12 +229,3 @@ private extension FireReason {
     }
   }
 }
-
-private extension TitleMatch {
-  var literalValue: String {
-    switch self {
-    case let .exact(value), let .contains(value), let .regex(value):
-      value
-    }
-  }
-}
