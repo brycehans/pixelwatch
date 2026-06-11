@@ -54,7 +54,7 @@ No confirmation dialog. No undo.
 
 `DragSourceCellView` is initialized with `onDrop: (CGPoint) -> Void`. The delegate implements:
 
-1. Use `CGWindowListCopyWindowInfo(.optionOnScreenOnly | .excludeDesktopElements, kCGNullWindowID)` to find the frontmost window whose bounds contain `screenPoint`, excluding PixelWatch's own windows (match by `kCGWindowOwnerName == "pixelwatch"`).
+1. Use `CGWindowListCopyWindowInfo(.optionOnScreenOnly | .excludeDesktopElements, kCGNullWindowID)` to find the frontmost window whose bounds contain `screenPoint`, excluding PixelWatch's own windows by comparing `kCGWindowOwnerPID` to `ProcessInfo.processInfo.processIdentifier`. This matches the existing pattern in `CGWindowCandidateProvider` and is robust to binary renames.
 2. Build a `WindowSnapshot` from that window's `kCGWindowBounds`, `kCGWindowName`, and `kCGWindowOwnerName`.
 3. Compute the watch rect: a fixed **200 × 150 pt** rect centered on `screenPoint`, then converted to window-relative coords via the existing `windowRelativeRect(fromScreen:windowBounds:)`.
 4. Build a `WatcherDraft` (name = window title, sensitivity = 0.5, command = "", armed = false).
