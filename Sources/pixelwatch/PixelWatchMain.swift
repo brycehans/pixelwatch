@@ -177,36 +177,73 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func handleDrop(at appKitPoint: CGPoint) {
+    NSLog("[DROP] handleDrop called appKit=%@", NSStringFromPoint(appKitPoint))
     popover.behavior = .transient
     popover.performClose(nil)
 
     // NSEvent.mouseLocation is AppKit bottom-left; CGWindowList bounds are CG top-left.
     let screenHeight = NSScreen.main?.frame.height ?? 0
     let cgPoint = CGPoint(x: appKitPoint.x, y: screenHeight - appKitPoint.y)
+    NSLog("[DROP] screenHeight=%.0f cgPoint=%@", screenHeight, NSStringFromPoint(cgPoint))
+
     let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
     guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+      NSLog("[DROP] CGWindowListCopyWindowInfo returned nil — aborting")
       return
     }
+    NSLog("[DROP] window list has %d entries", list.count)
 
     let ownPID = ProcessInfo.processInfo.processIdentifier
+    NSLog("[DROP] ownPID=%d", ownPID)
     var targetInfo: [String: Any]?
-    for info in list {
+    for (idx, info) in list.enumerated() {
+      let owner = info[String(kCGWindowOwnerName)] as? String ?? "?"
+      let layer = (info[String(kCGWindowLayer)] as? NSNumber)?.intValue ?? -999
+      let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)])
+      let windowTitle = info[String(kCGWindowName)] as? String
+      let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)])
+      let contains = bounds?.contains(cgPoint) == true
+
+      NSLog("[DROP] [%02d] owner='%@' layer=%d pid=%@ title='%@' bounds=%@ contains=%d",
+            idx, owner, layer,
+            pid.map { String($0) } ?? "nil",
+            windowTitle ?? "<nil>",
+            bounds.map { NSStringFromRect($0) } ?? "nil",
+            contains ? 1 : 0)
+
       // Only consider normal application windows (layer 0). Popovers, overlays, and
       // system chrome sit at higher layers and lack a valid kCGWindowNumber, which
       // causes the second guard below to fire erroneously.
-      let layer = (info[String(kCGWindowLayer)] as? NSNumber)?.intValue ?? 0
-      guard layer == 0 else { continue }
-      guard
-        let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)]),
-        pid != ownPID,
-        // Skip untitled subwindows — they can't be matched by WindowResolver later.
-        let windowTitle = info[String(kCGWindowName)] as? String, !windowTitle.isEmpty,
-        let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]),
-        bounds.contains(cgPoint)
-      else { continue }
+      guard layer == 0 else {
+        NSLog("[DROP] [%02d] SKIP: layer=%d != 0", idx, layer)
+        continue
+      }
+      guard let pid else {
+        NSLog("[DROP] [%02d] SKIP: pid nil", idx)
+        continue
+      }
+      guard pid != ownPID else {
+        NSLog("[DROP] [%02d] SKIP: pid=%d == ownPID", idx, pid)
+        continue
+      }
+      guard let windowTitle, !windowTitle.isEmpty else {
+        NSLog("[DROP] [%02d] SKIP: title nil or empty", idx)
+        continue
+      }
+      guard let bounds else {
+        NSLog("[DROP] [%02d] SKIP: bounds nil", idx)
+        continue
+      }
+      guard bounds.contains(cgPoint) else {
+        NSLog("[DROP] [%02d] SKIP: bounds %@ does not contain %@", idx, NSStringFromRect(bounds), NSStringFromPoint(cgPoint))
+        continue
+      }
+      NSLog("[DROP] [%02d] MATCH: owner='%@' pid=%d title='%@'", idx, owner, pid, windowTitle)
       targetInfo = info
       break
     }
+    NSLog("[DROP] loop done, targetInfo owner='%@'",
+          targetInfo?[String(kCGWindowOwnerName)] as? String ?? "nil (no match)")
 
     guard
       let info = targetInfo,
@@ -214,11 +251,13 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       let windowID = CGWindowDictParser.uint32Value(info[String(kCGWindowNumber)]),
       let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)])
     else {
+      NSLog("[DROP] second guard FAILED — firing alert")
       let alert = NSAlert()
       alert.messageText = "PixelWatch could not find a window at that location."
       alert.runModal()
       return
     }
+    NSLog("[DROP] second guard passed: windowID=%u pid=%d bounds=%@", windowID, pid, NSStringFromRect(bounds))
 
     let title = (info[String(kCGWindowName)] as? String) ?? ""
     let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""

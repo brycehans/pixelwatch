@@ -79,6 +79,7 @@ final class DragSourceNSView: NSView {
   }
 
   override func mouseUp(with event: NSEvent) {
+    NSLog("[DRAG] mouseUp isDragging=%d loc=%@", isDragging ? 1 : 0, NSStringFromPoint(NSEvent.mouseLocation))
     if isDragging {
       endDrag(at: NSEvent.mouseLocation)
     }
@@ -105,6 +106,8 @@ final class DragSourceNSView: NSView {
 
     mouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
       MainActor.assumeIsolated {
+        NSLog("[DRAG] globalMonitor leftMouseUp isDragging=%d loc=%@",
+              self?.isDragging == true ? 1 : 0, NSStringFromPoint(NSEvent.mouseLocation))
         guard let self, self.isDragging else { return }
         self.endDrag(at: NSEvent.mouseLocation)
       }
@@ -114,7 +117,11 @@ final class DragSourceNSView: NSView {
   private func endDrag(at screenPoint: CGPoint) {
     // Guard de-dups: mouseUp (local) and the global .leftMouseUp monitor can both
     // fire for the same release event when the cursor leaves our window during drag.
-    guard isDragging else { return }
+    NSLog("[DRAG] endDrag called screenPoint=%@ isDragging=%d", NSStringFromPoint(screenPoint), isDragging ? 1 : 0)
+    guard isDragging else {
+      NSLog("[DRAG] endDrag: already not dragging, returning")
+      return
+    }
     isDragging = false
     dragStartPoint = nil
 
@@ -126,11 +133,13 @@ final class DragSourceNSView: NSView {
       mouseUpMonitor = nil
     }
 
+    NSLog("[DRAG] closing floatingPanel, then calling onDrop at %@", NSStringFromPoint(screenPoint))
     floatingPanel?.close()
     floatingPanel = nil
 
     needsDisplay = true  // restore the in-grid cell
     onDrop(screenPoint)
+    NSLog("[DRAG] onDrop returned")
   }
 
   private func showFloatingPanel(at origin: CGPoint) {
