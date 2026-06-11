@@ -209,9 +209,8 @@ public final class NotificationPoster: NotificationPosting, Sendable {
   public init() {}
 
   public func post(body: String, identifier: String) async {
-    // Single-quote–safe shell embedding: replace ' with '\''
-    let escaped = body.replacingOccurrences(of: "'", with: "'\\''")
-    let cmd = "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title \"PixelWatch\"' -e 'end run' '\(escaped)'"
-    _ = await HookRunner.run(command: cmd, env: [:], timeout: 5)
+    let escaped = body.replacingOccurrences(of: "\"", with: "\\\"")
+    let cmd = "terminal-notifier -message \"\(escaped)\" -title PixelWatch -group \"\(identifier)\""
+    _ = await HookRunner.run(command: cmd, env: [:], timeout: 10)
   }
 }
