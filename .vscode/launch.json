@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:pixelwatch}",
+            "name": "Debug pixelwatch",
+            "target": "pixelwatch",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug pixelwatch"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:pixelwatch}",
+            "name": "Release pixelwatch",
+            "target": "pixelwatch",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release pixelwatch"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:pixelwatch}",
+            "name": "Debug pixelwatch-bench",
+            "target": "pixelwatch-bench",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug pixelwatch-bench"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:pixelwatch}",
+            "name": "Release pixelwatch-bench",
+            "target": "pixelwatch-bench",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release pixelwatch-bench"
+        }
+    ]
+}
