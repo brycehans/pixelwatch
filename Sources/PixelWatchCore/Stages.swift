@@ -198,7 +198,6 @@ private enum HookEnvironment {
     threshold: Double?
   ) -> [String: String] {
     [
-      "WATCH_NAME": watcher.name,
       "WATCH_ID": watcher.id.uuidString,
       "WATCH_AT": ISO8601DateFormatter().string(from: Date()),
       "WATCH_REASON": reason.environmentValue,

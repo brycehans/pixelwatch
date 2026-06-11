@@ -10,7 +10,6 @@ final class PersistenceTests: XCTestCase {
     let watchers = [
       Watcher(
         id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
-        name: "Main CI",
         target: WindowBinding(
           bundleID: "com.example.ci",
           titleMatch: .contains("Build"),
@@ -25,7 +24,6 @@ final class PersistenceTests: XCTestCase {
       ),
       Watcher(
         id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
-        name: "Chat badge",
         target: WindowBinding(bundleID: "com.example.chat", titleMatch: .exact("Chat")),
         rect: CGRect(x: 5, y: 6, width: 7, height: 8),
         sensitivity: 0.4,
@@ -51,13 +49,31 @@ final class PersistenceTests: XCTestCase {
     let directory = try makeTemporaryDirectory()
     let url = directory.appendingPathComponent("watchers.json")
     let persistence = WatcherPersistence(url: url)
-    let first = makePersistedWatcher(name: "First", armed: true)
-    let second = makePersistedWatcher(name: "Second", armed: false)
+    let first = makePersistedWatcher(armed: true)
+    let second = makePersistedWatcher(armed: false)
 
     try persistence.save([first])
     try persistence.save([second])
 
     XCTAssertEqual(try persistence.load(), [second])
+  }
+
+  func testLoadLegacyJsonWithNameFieldSucceeds() throws {
+    let directory = try makeTemporaryDirectory()
+    let url = directory.appendingPathComponent("watchers.json")
+    // Minimal JSON that includes a "name" key that no longer exists in Watcher.
+    // titleMatch uses Swift's synthesised encoding: {"exact":{"_0":"Window"}}.
+    let json = """
+    [{"id":"11111111-1111-1111-1111-111111111111","name":"Legacy Name",\
+    "target":{"bundleID":"com.example","titleMatch":{"exact":{"_0":"Window"}},\
+    "windowIDHint":null,"lastKnownBounds":null},\
+    "rect":[[0,0],[10,10]],\
+    "sensitivity":0.5,"tickIntervalSeconds":1,"command":"true","armed":false}]
+    """
+    try json.write(to: url, atomically: true, encoding: .utf8)
+    let loaded = try WatcherPersistence(url: url).load()
+    XCTAssertEqual(loaded.count, 1)
+    XCTAssertEqual(loaded[0].target.bundleID, "com.example")
   }
 
   private func makeTemporaryDirectory() throws -> URL {
@@ -67,10 +83,9 @@ final class PersistenceTests: XCTestCase {
     return url
   }
 
-  private func makePersistedWatcher(name: String, armed: Bool) -> Watcher {
+  private func makePersistedWatcher(armed: Bool) -> Watcher {
     Watcher(
       id: UUID(),
-      name: name,
       target: WindowBinding(bundleID: "com.example", titleMatch: .regex(".*")),
       rect: CGRect(x: 0, y: 0, width: 10, height: 10),
       sensitivity: 0.7,

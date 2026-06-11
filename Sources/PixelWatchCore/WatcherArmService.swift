@@ -18,7 +18,7 @@ public enum WatcherArmService {
     ) else {
       await bus.publish(.errored(
         watcherID: watcherID,
-        message: "Window not found for watcher '\(watcher.name)'"
+        message: "Window not found for watcher '\(watcher.target.titleMatch.literalValue)' (\(watcher.target.bundleID))"
       ))
       return
     }

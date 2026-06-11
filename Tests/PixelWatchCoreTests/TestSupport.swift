@@ -5,7 +5,6 @@ import Foundation
 func makeWatcher(sensitivity: Double) -> Watcher {
   Watcher(
     id: UUID(),
-    name: "Test Watcher",
     target: WindowBinding(bundleID: "com.example.app", titleMatch: .exact("Window")),
     rect: CGRect(x: 0, y: 0, width: 10, height: 10),
     sensitivity: sensitivity,

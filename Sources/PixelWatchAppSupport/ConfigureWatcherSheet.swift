@@ -107,7 +107,6 @@ public final class AppKitConfigureWatcherSheetPresenter: ConfigureWatcherSheetPr
         )
         let watcher = Watcher(
           id: UUID(),
-          name: name,
           target: target,
           rect: rect,
           sensitivity: sensitivity,

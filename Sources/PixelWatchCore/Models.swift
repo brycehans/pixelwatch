@@ -5,7 +5,6 @@ public typealias WatcherID = UUID
 
 public struct Watcher: Codable, Equatable, Sendable {
   public let id: WatcherID
-  public var name: String
   public var target: WindowBinding
   public var rect: CGRect
   public var sensitivity: Double
@@ -15,7 +14,6 @@ public struct Watcher: Codable, Equatable, Sendable {
 
   public init(
     id: WatcherID,
-    name: String,
     target: WindowBinding,
     rect: CGRect,
     sensitivity: Double,
@@ -24,7 +22,6 @@ public struct Watcher: Codable, Equatable, Sendable {
     armed: Bool
   ) {
     self.id = id
-    self.name = name
     self.target = target
     self.rect = rect
     self.sensitivity = sensitivity

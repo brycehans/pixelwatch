@@ -9,12 +9,11 @@ final class HookStageTests: XCTestCase {
     let runner = RecordingHookRunner(result: HookResult(exit: 7, stdout: "out", stderr: "err", timedOut: false))
     let watcher = Watcher(
       id: UUID(),
-      name: "CI Badge",
       target: WindowBinding(bundleID: "com.example.ci", titleMatch: .exact("Builds")),
       rect: CGRect(x: 1, y: 2, width: 30, height: 40),
       sensitivity: 0.7,
       tickIntervalSeconds: 1,
-      command: "notify \"$WATCH_NAME\"",
+      command: "notify \"$WATCH_WINDOW_TITLE\"",
       armed: false
     )
     let frame = PixelBuffer(width: 1, height: 1, linearRGB: [1, 1, 1])
@@ -55,13 +54,14 @@ final class HookStageTests: XCTestCase {
     XCTAssertEqual(stderr, "err")
 
     XCTAssertEqual(invocation?.command, watcher.command)
-    XCTAssertEqual(invocation?.env["WATCH_NAME"], "CI Badge")
+    XCTAssertNil(invocation?.env["WATCH_NAME"])
+    XCTAssertEqual(invocation?.env["WATCH_WINDOW_TITLE"], "Builds")
+    XCTAssertEqual(invocation?.env["WATCH_WINDOW_APP"], "com.example.ci")
     XCTAssertEqual(invocation?.env["WATCH_ID"], watcher.id.uuidString)
     XCTAssertEqual(invocation?.env["WATCH_REASON"], "pixel-change")
     XCTAssertEqual(invocation?.env["WATCH_SCORE"], "0.25")
     XCTAssertEqual(invocation?.env["WATCH_THRESHOLD"], "\(DecideStage.threshold(forSensitivity: watcher.sensitivity))")
     XCTAssertEqual(invocation?.env["WATCH_SENSITIVITY"], "0.7")
-    XCTAssertEqual(invocation?.env["WATCH_WINDOW_APP"], "com.example.ci")
     XCTAssertEqual(invocation?.env["WATCH_RECT"], "1.0,2.0,30.0,40.0")
     XCTAssertNotNil(invocation?.env["WATCH_AT"])
   }
