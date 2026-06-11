@@ -81,17 +81,15 @@ private struct WatcherRowView: View {
   var showRearm: Bool {
     switch item.state {
     case .triggered, .errored: return true
-    default: return false
+    case .idle, .armed: return false
     }
   }
 
   var body: some View {
     HStack(spacing: 0) {
-      // Col 1: baseline thumbnail
       ThumbnailView(buffer: item.baseline)
         .frame(width: 50)
 
-      // Col 2: status dot + state label
       HStack(spacing: 6) {
         Circle()
           .fill(Color(nsColor: OverlayAppearance.borderColor(for: item.state)))
@@ -104,11 +102,9 @@ private struct WatcherRowView: View {
       .padding(.horizontal, 8)
       .frame(maxWidth: .infinity, alignment: .leading)
 
-      // Col 3: latest-frame thumbnail
       ThumbnailView(buffer: item.latestFrame)
         .frame(width: 50)
 
-      // Col 4: action icons
       HStack(spacing: 4) {
         if showRearm {
           Button(action: onArm) {
@@ -145,8 +141,7 @@ private struct ThumbnailView: View {
       }
     }
     .frame(width: 50, height: 40)
-    .clipped()
-    .cornerRadius(3)
+    .clipShape(RoundedRectangle(cornerRadius: 3))
     .overlay(
       RoundedRectangle(cornerRadius: 3)
         .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
