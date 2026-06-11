@@ -5,22 +5,20 @@ import SwiftUI
 
 // MARK: - SwiftUI sheet view
 
-/// V1 configure-watcher sheet. Exposes name, sensitivity, command, and
+/// V1 configure-watcher sheet. Exposes sensitivity and command, and
 /// two action buttons: Save (armed=false) and Save & Arm (armed=true).
 struct ConfigureWatcherSheetView: View {
-  @State private var name: String
   @State private var sensitivity: Double
   @State private var command: String
 
-  let onSave: (String, Double, String, Bool) -> Void
+  let onSave: (Double, String, Bool) -> Void
   let onCancel: () -> Void
 
   init(
     draft: WatcherDraft,
-    onSave: @escaping (String, Double, String, Bool) -> Void,
+    onSave: @escaping (Double, String, Bool) -> Void,
     onCancel: @escaping () -> Void
   ) {
-    _name = State(initialValue: draft.name)
     _sensitivity = State(initialValue: draft.sensitivity)
     _command = State(initialValue: draft.command)
     self.onSave = onSave
@@ -33,7 +31,6 @@ struct ConfigureWatcherSheetView: View {
         .font(.headline)
 
       Form {
-        TextField("Name", text: $name)
         VStack(alignment: .leading, spacing: 4) {
           Text("Sensitivity: \(String(format: "%.2f", sensitivity))")
           Slider(value: $sensitivity, in: 0...1)
@@ -50,12 +47,12 @@ struct ConfigureWatcherSheetView: View {
         Spacer()
 
         Button("Save") {
-          onSave(name, sensitivity, command, false)
+          onSave(sensitivity, command, false)
         }
         .keyboardShortcut(.return, modifiers: [])
 
         Button("Save & Arm") {
-          onSave(name, sensitivity, command, true)
+          onSave(sensitivity, command, true)
         }
         .keyboardShortcut(.return, modifiers: [.command])
       }
@@ -91,7 +88,7 @@ public final class AppKitConfigureWatcherSheetPresenter: ConfigureWatcherSheetPr
 
       var resumed = false
 
-      let save: (String, Double, String, Bool) -> Void = { [weak panel] name, sensitivity, command, armed in
+      let save: (Double, String, Bool) -> Void = { [weak panel] sensitivity, command, armed in
         guard !resumed else { return }
         resumed = true
         panel?.close()

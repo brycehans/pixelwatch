@@ -37,20 +37,17 @@ public func windowRelativeRect(fromScreen rect: CGRect, windowBounds: CGRect) ->
 
 public struct WatcherDraft: Sendable {
   public var window: WindowSnapshot
-  public var name: String
   public var sensitivity: Double
   public var command: String
   public var armed: Bool
 
   public init(
     window: WindowSnapshot,
-    name: String,
     sensitivity: Double,
     command: String,
     armed: Bool
   ) {
     self.window = window
-    self.name = name
     self.sensitivity = sensitivity
     self.command = command
     self.armed = armed
@@ -99,7 +96,6 @@ public final class NewWatcherCoordinator {
 
     let draft = WatcherDraft(
       window: snapshot,
-      name: snapshot.title,
       sensitivity: 0.5,
       command: "",
       armed: false

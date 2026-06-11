@@ -245,7 +245,6 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     )
     let draft = WatcherDraft(
       window: windowSnapshot,
-      name: title.isEmpty ? bundleID : title,
       sensitivity: 0.5,
       command: "",
       armed: false
@@ -357,7 +356,6 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       let snap = await store.snapshot(for: watcher.id)
       items.append(WatcherThumbnailItem(
         id: watcher.id,
-        name: watcher.target.titleMatch.literalValue,
         state: snap?.state ?? .idle,
         latestFrame: snap?.latestFrame
       ))
