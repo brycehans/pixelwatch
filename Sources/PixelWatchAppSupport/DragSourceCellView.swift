@@ -198,7 +198,7 @@ private final class DragFloatPanel: NSPanel {
 }
 
 @MainActor
-private final class DragFloatVisualView: NSView {
+final class DragFloatVisualView: NSView {
   var onCancel: @MainActor () -> Void = {}
 
   override var acceptsFirstResponder: Bool { true }
@@ -213,11 +213,15 @@ private final class DragFloatVisualView: NSView {
 
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
-    let inset = bounds.insetBy(dx: 2, dy: 2)
-    let path = NSBezierPath(roundedRect: inset, xRadius: 4, yRadius: 4)
-    NSColor.secondaryLabelColor.withAlphaComponent(0.85).setStroke()
-    path.lineWidth = 3
-    path.stroke()
+    let outerPath = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 4, yRadius: 4)
+    NSColor.black.withAlphaComponent(0.9).setStroke()
+    outerPath.lineWidth = 2
+    outerPath.stroke()
+
+    let innerPath = NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 4), xRadius: 3, yRadius: 3)
+    NSColor.white.withAlphaComponent(0.95).setStroke()
+    innerPath.lineWidth = 3
+    innerPath.stroke()
 
     let attrs: [NSAttributedString.Key: Any] = [
       .font: NSFont.systemFont(ofSize: 14),
