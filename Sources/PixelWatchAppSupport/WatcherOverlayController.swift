@@ -482,11 +482,15 @@ public final class WatcherOverlayController {
   /// Refresh overlay position and visibility against current window geometry.
   /// An overlay is visible only when its target window is on-screen AND the
   /// target's app is the frontmost app. Cmd+Tab away → hide; Cmd+Tab back → show.
+  /// PixelWatch's own transient UI is ignored for this purpose: creating or
+  /// configuring a watcher should not hide the overlay for an otherwise visible
+  /// target window.
   /// Registered overlays also follow their target window when it's dragged:
   /// the translation between the current bounds and `anchorBounds` is applied
   /// to `anchorRect` to produce the on-screen frame.
   public func sync() {
     let frontmostPID = frontmostProcessIDProvider()
+    let pixelWatchPID = ProcessInfo.processInfo.processIdentifier
     for (_, entry) in entries {
       guard let snapshot = windowSnapshotProvider.windowSnapshot(windowID: entry.windowID) else {
         entry.overlay.setVisible(false)
@@ -497,7 +501,7 @@ public final class WatcherOverlayController {
         let dy = snapshot.bounds.origin.y - anchorBounds.origin.y
         entry.overlay.setFrame(anchorRect.offsetBy(dx: dx, dy: dy))
       }
-      let isFrontmost = (snapshot.processID == frontmostPID)
+      let isFrontmost = snapshot.processID == frontmostPID || frontmostPID == pixelWatchPID
       entry.overlay.setVisible(snapshot.isVisible && isFrontmost)
     }
   }

@@ -63,6 +63,32 @@ final class WatcherOverlayControllerTests: XCTestCase {
     XCTAssertEqual(overlay.visibleValues, [true, true, false, true])  // Cmd+Tab back → visible
   }
 
+  func testSyncKeepsOverlayVisibleWhenPixelWatchItselfIsFrontmost() {
+    let overlay = RecordingOverlayWindow()
+    let snapshot = WindowSnapshot(
+      windowID: 42,
+      processID: 99,
+      bundleID: "com.example",
+      title: "Editor",
+      bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
+      isVisible: true
+    )
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { CGPoint(x: 220, y: 180) },
+      windowSnapshotProvider: StubWindowSnapshotProvider(snapshots: [snapshot]),
+      frontmostProcessIDProvider: { ProcessInfo.processInfo.processIdentifier }
+    )
+
+    let session = controller.begin(windowID: 42)
+    session.freeze()
+    controller.register(watcherID: UUID(), for: session)
+
+    controller.sync()
+
+    XCTAssertEqual(overlay.visibleValues, [true, true])
+  }
+
   // Coord conversion: controller produces top-left-origin frames, NSWindow uses
   // bottom-left. The panel converts at the boundary; this locks the math.
   func testScreenBottomLeftRectConvertsTopLeftFrame() {
