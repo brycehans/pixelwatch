@@ -183,7 +183,6 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     // NSEvent.mouseLocation is AppKit bottom-left; CGWindowList bounds are CG top-left.
     let screenHeight = NSScreen.main?.frame.height ?? 0
     let cgPoint = CGPoint(x: appKitPoint.x, y: screenHeight - appKitPoint.y)
-
     let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
     guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
       return
@@ -192,6 +191,11 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     let ownPID = ProcessInfo.processInfo.processIdentifier
     var targetInfo: [String: Any]?
     for info in list {
+      // Only consider normal application windows (layer 0). Popovers, overlays, and
+      // system chrome sit at higher layers and lack a valid kCGWindowNumber, which
+      // causes the second guard below to fire erroneously.
+      let layer = (info[String(kCGWindowLayer)] as? NSNumber)?.intValue ?? 0
+      guard layer == 0 else { continue }
       guard
         let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)]),
         pid != ownPID,
