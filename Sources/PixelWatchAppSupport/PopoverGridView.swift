@@ -24,28 +24,6 @@ public struct PopoverGridView: View {
 
   public var body: some View {
     VStack(spacing: 0) {
-      ScrollView(.vertical) {
-        if model.items.isEmpty {
-          EmptyPopoverView()
-        } else {
-          LazyVStack(spacing: 8) {
-            ForEach(model.items) { item in
-              WatcherRowView(
-                item: item,
-                onDelete: { onDelete(item.id) },
-                onArm: { onArm(item.id) }
-              )
-            }
-          }
-          .padding(10)
-        }
-      }
-      .scrollIndicators(.hidden)
-
-      Rectangle()
-        .fill(Color.primary.opacity(0.08))
-        .frame(height: 1)
-
       HStack(spacing: 10) {
         DragSourceCellView(onClick: onNewWatcher)
           .frame(width: 28, height: 28)
@@ -67,6 +45,28 @@ public struct PopoverGridView: View {
       .padding(.horizontal, 10)
       .padding(.vertical, 8)
       .background(.regularMaterial)
+
+      Rectangle()
+        .fill(Color.primary.opacity(0.08))
+        .frame(height: 1)
+
+      ScrollView(.vertical) {
+        if model.items.isEmpty {
+          EmptyPopoverView()
+        } else {
+          LazyVStack(spacing: 8) {
+            ForEach(model.items) { item in
+              WatcherRowView(
+                item: item,
+                onDelete: { onDelete(item.id) },
+                onArm: { onArm(item.id) }
+              )
+            }
+          }
+          .padding(10)
+        }
+      }
+      .scrollIndicators(.hidden)
     }
     .frame(width: 380)
     .background(
@@ -174,7 +174,9 @@ private struct ThumbnailView: View {
       if let nsImage = buffer?.displayImage {
         Image(nsImage: nsImage)
           .resizable()
-          .scaledToFill()
+          .aspectRatio(contentMode: .fill)
+          .frame(width: 50, height: 40)
+          .clipped()
       } else {
         LinearGradient(
           colors: [
