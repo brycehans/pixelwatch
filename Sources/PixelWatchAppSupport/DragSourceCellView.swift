@@ -1,58 +1,44 @@
-// Sources/PixelWatchAppSupport/DragSourceCellView.swift
 import AppKit
 import SwiftUI
-
-private let dragThreshold: CGFloat = 5
-private let dropSquareSize = CGSize(width: 50, height: 40)
 
 // MARK: - NSViewRepresentable entry point
 
 struct DragSourceCellView: NSViewRepresentable {
-  let onDrop: @MainActor (CGPoint) -> Void
-  let onDragStarted: @MainActor () -> Void
+  let onClick: @MainActor () -> Void
 
   func makeNSView(context: Context) -> DragSourceNSView {
     let v = DragSourceNSView()
-    v.onDrop = onDrop
-    v.onDragStarted = onDragStarted
+    v.onClick = onClick
     return v
   }
 
   func updateNSView(_ nsView: DragSourceNSView, context: Context) {
-    nsView.onDrop = onDrop
-    nsView.onDragStarted = onDragStarted
+    nsView.onClick = onClick
   }
 }
 
-// MARK: - AppKit drag source view
+// MARK: - AppKit plus control
 
 @MainActor
 final class DragSourceNSView: NSView {
-  var onDrop: @MainActor (CGPoint) -> Void = { _ in }
-  var onDragStarted: @MainActor () -> Void = {}
+  var onClick: @MainActor () -> Void = {}
 
-  private var dragStartPoint: CGPoint?
-  private var isDragging = false
-  private var floatingPanel: NSPanel?
-  private var trackingTimer: Timer?
-  private var mouseUpMonitor: Any?
+  private var isPressed = false
 
   override var acceptsFirstResponder: Bool { true }
 
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
-    // Hide in-grid visual while dragging — the floating panel IS the square.
-    guard !isDragging else { return }
 
     let inset = bounds.insetBy(dx: 2, dy: 2)
     let path = NSBezierPath(roundedRect: inset, xRadius: 4, yRadius: 4)
-    NSColor.secondaryLabelColor.setStroke()
-    path.lineWidth = 3
+    NSColor.secondaryLabelColor.withAlphaComponent(isPressed ? 0.85 : 0.65).setStroke()
+    path.lineWidth = 2
     path.stroke()
 
     let attrs: [NSAttributedString.Key: Any] = [
-      .font: NSFont.systemFont(ofSize: 14),
-      .foregroundColor: NSColor.secondaryLabelColor,
+      .font: NSFont.systemFont(ofSize: 14, weight: .semibold),
+      .foregroundColor: NSColor.secondaryLabelColor.withAlphaComponent(isPressed ? 0.95 : 0.85),
     ]
     let str = NSAttributedString(string: "+", attributes: attrs)
     let size = str.size()
@@ -65,175 +51,17 @@ final class DragSourceNSView: NSView {
   }
 
   override func mouseDown(with event: NSEvent) {
-    dragStartPoint = convert(event.locationInWindow, from: nil)
-    isDragging = false
-  }
-
-  override func mouseDragged(with event: NSEvent) {
-    guard let start = dragStartPoint, !isDragging else { return }
-    let current = convert(event.locationInWindow, from: nil)
-    let dx = current.x - start.x
-    let dy = current.y - start.y
-    guard sqrt(dx * dx + dy * dy) >= dragThreshold else { return }
-    startDrag()
+    isPressed = true
+    needsDisplay = true
   }
 
   override func mouseUp(with event: NSEvent) {
-    NSLog("[DRAG] mouseUp isDragging=%d loc=%@", isDragging ? 1 : 0, NSStringFromPoint(NSEvent.mouseLocation))
-    if isDragging {
-      endDrag(at: NSEvent.mouseLocation)
+    let point = convert(event.locationInWindow, from: nil)
+    let shouldClick = bounds.contains(point)
+    isPressed = false
+    needsDisplay = true
+    if shouldClick {
+      onClick()
     }
-    dragStartPoint = nil
-  }
-
-  override func keyDown(with event: NSEvent) {
-    guard event.keyCode == 53, isDragging else {
-      super.keyDown(with: event)
-      return
-    }
-    cancelDrag()
-  }
-
-  private func startDrag() {
-    isDragging = true
-    needsDisplay = true  // blank the in-grid cell; floating panel becomes the square
-    onDragStarted()
-    showFloatingPanel(at: NSEvent.mouseLocation)
-
-    trackingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-      MainActor.assumeIsolated {
-        guard let self, self.isDragging else { return }
-        self.floatingPanel?.setFrameOrigin(
-          NSPoint(
-            x: NSEvent.mouseLocation.x - dropSquareSize.width / 2,
-            y: NSEvent.mouseLocation.y - dropSquareSize.height / 2
-          )
-        )
-      }
-    }
-
-    mouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
-      MainActor.assumeIsolated {
-        NSLog("[DRAG] globalMonitor leftMouseUp isDragging=%d loc=%@",
-              self?.isDragging == true ? 1 : 0, NSStringFromPoint(NSEvent.mouseLocation))
-        guard let self, self.isDragging else { return }
-        self.endDrag(at: NSEvent.mouseLocation)
-      }
-    }
-  }
-
-  private func endDrag(at screenPoint: CGPoint) {
-    // Guard de-dups: mouseUp (local) and the global .leftMouseUp monitor can both
-    // fire for the same release event when the cursor leaves our window during drag.
-    NSLog("[DRAG] endDrag called screenPoint=%@ isDragging=%d", NSStringFromPoint(screenPoint), isDragging ? 1 : 0)
-    guard isDragging else {
-      NSLog("[DRAG] endDrag: already not dragging, returning")
-      return
-    }
-    finishDrag()
-
-    NSLog("[DRAG] closing floatingPanel, then calling onDrop at %@", NSStringFromPoint(screenPoint))
-    onDrop(screenPoint)
-    NSLog("[DRAG] onDrop returned")
-  }
-
-  private func cancelDrag() {
-    NSLog("[DRAG] cancelDrag isDragging=%d", isDragging ? 1 : 0)
-    guard isDragging else { return }
-    finishDrag()
-  }
-
-  private func finishDrag() {
-    isDragging = false
-    dragStartPoint = nil
-
-    trackingTimer?.invalidate()
-    trackingTimer = nil
-
-    if let monitor = mouseUpMonitor {
-      NSEvent.removeMonitor(monitor)
-      mouseUpMonitor = nil
-    }
-
-    floatingPanel?.close()
-    floatingPanel = nil
-
-    needsDisplay = true  // restore the in-grid cell
-  }
-
-  private func showFloatingPanel(at origin: CGPoint) {
-    let panel = DragFloatPanel(
-      contentRect: NSRect(
-        x: origin.x - dropSquareSize.width / 2,
-        y: origin.y - dropSquareSize.height / 2,
-        width: dropSquareSize.width,
-        height: dropSquareSize.height
-      ),
-      styleMask: [.borderless],
-      backing: .buffered,
-      defer: false
-    )
-    panel.isOpaque = false
-    panel.backgroundColor = .clear
-    panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
-    panel.ignoresMouseEvents = true
-    panel.isReleasedWhenClosed = false
-
-    let contentView = DragFloatVisualView(frame: NSRect(origin: .zero, size: dropSquareSize))
-    contentView.onCancel = { [weak self] in self?.cancelDrag() }
-    panel.contentView = contentView
-    NSApp.activate(ignoringOtherApps: true)
-    panel.makeKeyAndOrderFront(nil)
-    panel.makeFirstResponder(contentView)
-    floatingPanel = panel
-  }
-}
-
-// MARK: - Floating panel visual
-
-@MainActor
-private final class DragFloatPanel: NSPanel {
-  override var canBecomeKey: Bool { true }
-  override var canBecomeMain: Bool { false }
-}
-
-@MainActor
-final class DragFloatVisualView: NSView {
-  var onCancel: @MainActor () -> Void = {}
-
-  override var acceptsFirstResponder: Bool { true }
-
-  override func keyDown(with event: NSEvent) {
-    guard event.keyCode == 53 else {
-      super.keyDown(with: event)
-      return
-    }
-    onCancel()
-  }
-
-  override func draw(_ dirtyRect: NSRect) {
-    super.draw(dirtyRect)
-    let outerPath = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 4, yRadius: 4)
-    NSColor.black.withAlphaComponent(0.9).setStroke()
-    outerPath.lineWidth = 2
-    outerPath.stroke()
-
-    let innerPath = NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 4), xRadius: 3, yRadius: 3)
-    NSColor.white.withAlphaComponent(0.95).setStroke()
-    innerPath.lineWidth = 3
-    innerPath.stroke()
-
-    let attrs: [NSAttributedString.Key: Any] = [
-      .font: NSFont.systemFont(ofSize: 14),
-      .foregroundColor: NSColor.secondaryLabelColor.withAlphaComponent(0.85),
-    ]
-    let str = NSAttributedString(string: "+", attributes: attrs)
-    let size = str.size()
-    str.draw(
-      at: NSPoint(
-        x: (bounds.width - size.width) / 2,
-        y: (bounds.height - size.height) / 2
-      )
-    )
   }
 }

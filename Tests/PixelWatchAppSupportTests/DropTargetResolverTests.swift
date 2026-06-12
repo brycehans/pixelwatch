@@ -45,17 +45,89 @@ final class DropTargetResolverTests: XCTestCase {
     )
   }
 
+  func testResolveIgnoresOwnProcessLayerZeroWindowUnderDropPoint() {
+    let resolver = DropTargetResolver(
+      ownProcessID: 99,
+      bundleIdentifierForProcessID: { _ in nil }
+    )
+
+    let target = resolver.resolve(
+      appKitDropPoint: CGPoint(x: 700, y: 700),
+      screenHeight: 982,
+      windowInfo: [
+        windowInfo(
+          ownerPID: 99,
+          layer: 0,
+          windowID: 1,
+          title: "PixelWatch",
+          bounds: CGRect(x: 0, y: 38, width: 1512, height: 944)
+        )
+      ]
+    )
+
+    XCTAssertNil(target)
+  }
+
+  func testResolveIgnoresOffscreenWindowUnderDropPoint() {
+    let resolver = DropTargetResolver(
+      ownProcessID: 99,
+      bundleIdentifierForProcessID: { _ in nil }
+    )
+
+    let target = resolver.resolve(
+      appKitDropPoint: CGPoint(x: 700, y: 700),
+      screenHeight: 982,
+      windowInfo: [
+        windowInfo(
+          ownerPID: 42,
+          layer: 0,
+          windowID: 2,
+          title: "Hidden",
+          bounds: CGRect(x: 0, y: 38, width: 1512, height: 944),
+          isOnscreen: false
+        )
+      ]
+    )
+
+    XCTAssertNil(target)
+  }
+
+  func testResolveIgnoresNonZeroLayerWindowUnderDropPoint() {
+    let resolver = DropTargetResolver(
+      ownProcessID: 99,
+      bundleIdentifierForProcessID: { _ in nil }
+    )
+
+    let target = resolver.resolve(
+      appKitDropPoint: CGPoint(x: 700, y: 700),
+      screenHeight: 982,
+      windowInfo: [
+        windowInfo(
+          ownerPID: 42,
+          layer: 25,
+          windowID: 2,
+          title: "Popover",
+          bounds: CGRect(x: 0, y: 38, width: 1512, height: 944)
+        )
+      ]
+    )
+
+    XCTAssertNil(target)
+  }
+
   private func windowInfo(
     ownerPID: pid_t,
     layer: Int,
     windowID: UInt32,
     title: String?,
-    bounds: CGRect
+    bounds: CGRect,
+    isOnscreen: Bool = true
   ) -> [String: Any] {
     var info: [String: Any] = [
       String(kCGWindowOwnerPID): ownerPID,
       String(kCGWindowLayer): layer,
       String(kCGWindowNumber): windowID,
+      String(kCGWindowIsOnscreen): isOnscreen,
       String(kCGWindowBounds): [
         "X": bounds.origin.x,
         "Y": bounds.origin.y,

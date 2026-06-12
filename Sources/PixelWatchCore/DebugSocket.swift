@@ -18,13 +18,18 @@ public enum DebugSocketError: Error {
 // MARK: - Commands sent in from socket clients
 
 /// Imperative commands a socket client can send to drive the running app.
-/// Wire format is `{"cmd":"<case>"}` per line; dropAt also carries `"x"` and `"y"`.
+/// Wire format is `{"cmd":"<case>"}` per line; coordinate commands also carry `"x"` and `"y"`.
 public enum DebugCommand: Codable, Sendable, Equatable {
   case newWatcher
   case quit
   case dropAt(x: Double, y: Double)
+  case drawBegin(x: Double, y: Double)
+  case drawMove(x: Double, y: Double)
+  case drawEnd(x: Double, y: Double)
+  case drawCancel
+  case drawRect(startX: Double, startY: Double, endX: Double, endY: Double)
 
-  private enum CodingKeys: String, CodingKey { case cmd, x, y }
+  private enum CodingKeys: String, CodingKey { case cmd, x, y, startX, startY, endX, endY }
 
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -36,6 +41,26 @@ public enum DebugCommand: Codable, Sendable, Equatable {
       let x = try c.decode(Double.self, forKey: .x)
       let y = try c.decode(Double.self, forKey: .y)
       self = .dropAt(x: x, y: y)
+    case "drawBegin":
+      let x = try c.decode(Double.self, forKey: .x)
+      let y = try c.decode(Double.self, forKey: .y)
+      self = .drawBegin(x: x, y: y)
+    case "drawMove":
+      let x = try c.decode(Double.self, forKey: .x)
+      let y = try c.decode(Double.self, forKey: .y)
+      self = .drawMove(x: x, y: y)
+    case "drawEnd":
+      let x = try c.decode(Double.self, forKey: .x)
+      let y = try c.decode(Double.self, forKey: .y)
+      self = .drawEnd(x: x, y: y)
+    case "drawCancel":
+      self = .drawCancel
+    case "drawRect":
+      let startX = try c.decode(Double.self, forKey: .startX)
+      let startY = try c.decode(Double.self, forKey: .startY)
+      let endX = try c.decode(Double.self, forKey: .endX)
+      let endY = try c.decode(Double.self, forKey: .endY)
+      self = .drawRect(startX: startX, startY: startY, endX: endX, endY: endY)
     default:
       throw DecodingError.dataCorruptedError(forKey: .cmd, in: c, debugDescription: "Unknown command: \(cmd)")
     }
@@ -50,6 +75,26 @@ public enum DebugCommand: Codable, Sendable, Equatable {
       try c.encode("dropAt", forKey: .cmd)
       try c.encode(x, forKey: .x)
       try c.encode(y, forKey: .y)
+    case let .drawBegin(x, y):
+      try c.encode("drawBegin", forKey: .cmd)
+      try c.encode(x, forKey: .x)
+      try c.encode(y, forKey: .y)
+    case let .drawMove(x, y):
+      try c.encode("drawMove", forKey: .cmd)
+      try c.encode(x, forKey: .x)
+      try c.encode(y, forKey: .y)
+    case let .drawEnd(x, y):
+      try c.encode("drawEnd", forKey: .cmd)
+      try c.encode(x, forKey: .x)
+      try c.encode(y, forKey: .y)
+    case .drawCancel:
+      try c.encode("drawCancel", forKey: .cmd)
+    case let .drawRect(startX, startY, endX, endY):
+      try c.encode("drawRect", forKey: .cmd)
+      try c.encode(startX, forKey: .startX)
+      try c.encode(startY, forKey: .startY)
+      try c.encode(endX, forKey: .endX)
+      try c.encode(endY, forKey: .endY)
     }
   }
 }

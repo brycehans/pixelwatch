@@ -25,6 +25,9 @@ public struct DropTargetResolver {
       let layer = CGWindowDictParser.intValue(info[String(kCGWindowLayer)]) ?? 0
       guard layer == 0 else { continue }
 
+      let isOnscreen = CGWindowDictParser.boolValue(info[String(kCGWindowIsOnscreen)]) ?? true
+      guard isOnscreen else { continue }
+
       guard let pid = CGWindowDictParser.processIDValue(info[String(kCGWindowOwnerPID)]),
             pid != ownProcessID,
             let bounds = CGWindowDictParser.rectValue(info[String(kCGWindowBounds)]),

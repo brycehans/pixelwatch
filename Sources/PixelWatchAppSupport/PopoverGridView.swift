@@ -5,23 +5,20 @@ public struct PopoverGridView: View {
   @State var model: PopoverModel
   let onDelete: (WatcherID) -> Void
   let onArm: (WatcherID) -> Void
-  let onDrop: @MainActor (CGPoint) -> Void
-  let onDragStarted: @MainActor () -> Void
+  let onNewWatcher: @MainActor () -> Void
   let onQuit: () -> Void
 
   public init(
     model: PopoverModel,
     onDelete: @escaping (WatcherID) -> Void,
     onArm: @escaping (WatcherID) -> Void,
-    onDrop: @escaping @MainActor (CGPoint) -> Void,
-    onDragStarted: @escaping @MainActor () -> Void = {},
+    onNewWatcher: @escaping @MainActor () -> Void,
     onQuit: @escaping () -> Void
   ) {
     self.model = model
     self.onDelete = onDelete
     self.onArm = onArm
-    self.onDrop = onDrop
-    self.onDragStarted = onDragStarted
+    self.onNewWatcher = onNewWatcher
     self.onQuit = onQuit
   }
 
@@ -50,7 +47,7 @@ public struct PopoverGridView: View {
         .frame(height: 1)
 
       HStack(spacing: 10) {
-        DragSourceCellView(onDrop: onDrop, onDragStarted: onDragStarted)
+        DragSourceCellView(onClick: onNewWatcher)
           .frame(width: 28, height: 28)
           .clipShape(RoundedRectangle(cornerRadius: 6))
           .shadow(color: .black.opacity(0.08), radius: 5, x: 0, y: 2)

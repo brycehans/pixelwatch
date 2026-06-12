@@ -50,8 +50,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       model: popoverModel,
       onDelete: { [weak self] id in self?.handleDeleteWatcher(id: id) },
       onArm: { [weak self] id in self?.handleArmWatcher(id: id) },
-      onDrop: { [weak self] point in self?.handleDrop(at: point) },
-      onDragStarted: { [weak self] in self?.handleDragStarted() },
+      onNewWatcher: { [weak self] in self?.newWatcherClicked(nil) },
       onQuit: { NSApp.terminate(nil) }
     ))
   }()
@@ -65,20 +64,7 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   private let overlayController = WatcherOverlayController()
   private var syncTimer: Timer?
   private var debugSocket: DebugSocket?
-  private lazy var coordinator: NewWatcherCoordinator = {
-    let factory = WatcherOverlayControllerSessionFactory(controller: overlayController)
-    let sheetPresenter = AppKitConfigureWatcherSheetPresenter()
-    return NewWatcherCoordinator(
-      focusedWindowProvider: CGFocusedWindowProvider(),
-      alertPresenter: NSAlertPresenter(),
-      overlaySessionFactory: factory,
-      configureSheetPresenter: sheetPresenter,
-      onWatcherCreated: { [weak self] watcher, session in
-        guard let self else { return }
-        self.handleWatcherCreated(watcher, session: session)
-      }
-    )
-  }()
+  private var debugDrawSession: WatchAreaDrawSession?
 
   func applicationDidFinishLaunching(_: Notification) {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -148,7 +134,16 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @objc private func newWatcherClicked(_: AnyObject?) {
-    Task { await coordinator.startNewWatcher() }
+    Task { await startInteractiveDrawMode() }
+  }
+
+  private func startInteractiveDrawMode() async {
+    hidePopover()
+    debugDrawSession?.tearDownProgrammatic()
+    debugDrawSession = nil
+    let session = WatchAreaDrawSession()
+    let result = await session.start()
+    handleDrawResult(result)
   }
 
   /// Dispatches a DebugSocket command to its UI side-effect. Runs on the main actor
@@ -161,7 +156,92 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
       NSApp.terminate(nil)
     case let .dropAt(x, y):
       handleDrop(at: CGPoint(x: x, y: y))
+    case let .drawBegin(x, y):
+      handleDebugDrawBegin(at: CGPoint(x: x, y: y))
+    case let .drawMove(x, y):
+      handleDebugDrawMove(at: CGPoint(x: x, y: y))
+    case let .drawEnd(x, y):
+      handleDebugDrawEnd(at: CGPoint(x: x, y: y))
+    case .drawCancel:
+      handleDebugDrawCancel()
+    case let .drawRect(startX, startY, endX, endY):
+      handleDebugDrawRect(
+        from: CGPoint(x: startX, y: startY),
+        to: CGPoint(x: endX, y: endY)
+      )
     }
+  }
+
+  private func handleDebugDrawBegin(at point: CGPoint) {
+    hidePopover()
+    debugDrawSession?.tearDownProgrammatic()
+    let session = WatchAreaDrawSession()
+    session.prepareForProgrammaticInput()
+
+    if let result = session.begin(atAppKitPoint: point) {
+      session.tearDownProgrammatic()
+      debugDrawSession = nil
+      handleDrawResult(result)
+      return
+    }
+
+    debugDrawSession = session
+  }
+
+  private func handleDebugDrawMove(at point: CGPoint) {
+    debugDrawSession?.updatePreview(atAppKitPoint: point)
+  }
+
+  private func handleDebugDrawEnd(at point: CGPoint) {
+    guard let session = debugDrawSession else {
+      showNoWindowAlert()
+      return
+    }
+    debugDrawSession = nil
+    handleDrawResult(session.finishProgrammatic(atAppKitPoint: point))
+  }
+
+  private func handleDebugDrawCancel() {
+    _ = debugDrawSession?.cancelProgrammatic()
+    debugDrawSession = nil
+  }
+
+  private func handleDebugDrawRect(from start: CGPoint, to end: CGPoint) {
+    handleDebugDrawBegin(at: start)
+    guard debugDrawSession != nil else { return }
+    handleDebugDrawMove(at: end)
+    handleDebugDrawEnd(at: end)
+  }
+
+  private func handleDrawResult(_ result: WatchAreaDrawSession.DrawResult) {
+    switch result {
+    case let .success(selection):
+      presentConfiguration(for: selection)
+    case .failure(.cancelled):
+      return
+    case .failure(.invalidWindow), .failure(.invalidSelection):
+      showNoWindowAlert()
+    }
+  }
+
+  private func presentConfiguration(for selection: WatchAreaDrawSelection) {
+    let draft = WatcherDraft(
+      window: selection.window,
+      sensitivity: 0.5,
+      commandMode: .notification(body: "Change found on \(selection.window.title)"),
+      armed: false
+    )
+    let session = FrozenOverlaySession(frozenRect: selection.screenRect)
+    let presenter = AppKitConfigureWatcherSheetPresenter()
+
+    Task {
+      guard let watcher = await presenter.present(draft: draft, overlay: session) else { return }
+      handleWatcherCreatedFromDrag(watcher, windowID: selection.window.windowID)
+    }
+  }
+
+  private func showNoWindowAlert() {
+    NSAlertPresenter().show(message: "PixelWatch could not find a usable focused window.")
   }
 
   private func handleWatcherCreated(_ watcher: Watcher, session: any WatcherOverlaySession) {
@@ -202,11 +282,6 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     Task {
       await bus.publish(.paused(watcherID: id, reason: .userPaused))
     }
-  }
-
-  private func handleDragStarted() {
-    popover.behavior = .applicationDefined
-    hidePopover()
   }
 
   private func handleDeleteWatcher(id: WatcherID) {

@@ -262,6 +262,29 @@ Simulate dropping the create tile at AppKit screen coordinates:
 printf '{"cmd":"dropAt","x":800,"y":600}\n' | nc -U ~/Library/Application\ Support/PixelWatch/bus.sock
 ```
 
+Drive draw mode at AppKit screen coordinates. `drawBegin` infers the target
+window under the start point, `drawMove` updates the preview rectangle, and
+`drawEnd` freezes the rectangle and opens the configuration sheet:
+
+```sh
+printf '{"cmd":"drawBegin","x":800,"y":600}\n' | nc -U ~/Library/Application\ Support/PixelWatch/bus.sock
+printf '{"cmd":"drawMove","x":980,"y":720}\n' | nc -U ~/Library/Application\ Support/PixelWatch/bus.sock
+printf '{"cmd":"drawEnd","x":980,"y":720}\n' | nc -U ~/Library/Application\ Support/PixelWatch/bus.sock
+```
+
+Cancel an in-progress debug-driven draw:
+
+```sh
+printf '{"cmd":"drawCancel"}\n' | nc -U ~/Library/Application\ Support/PixelWatch/bus.sock
+```
+
+For automation that does not need intermediate preview states, use `drawRect`.
+It runs the same path as begin, move, then end:
+
+```sh
+printf '{"cmd":"drawRect","startX":800,"startY":600,"endX":980,"endY":720}\n' | nc -U ~/Library/Application\ Support/PixelWatch/bus.sock
+```
+
 The debug socket is a development/debugging surface and currently starts
 unconditionally.
 

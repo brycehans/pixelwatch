@@ -119,6 +119,41 @@ final class DebugSocketTests: XCTestCase {
     )
   }
 
+  func testDispatchesDrawBeginCommandToHandler() async throws {
+    try await runCommandDispatch(
+      json: "{\"cmd\":\"drawBegin\",\"x\":10,\"y\":20}",
+      expected: .drawBegin(x: 10, y: 20)
+    )
+  }
+
+  func testDispatchesDrawMoveCommandToHandler() async throws {
+    try await runCommandDispatch(
+      json: "{\"cmd\":\"drawMove\",\"x\":30,\"y\":40}",
+      expected: .drawMove(x: 30, y: 40)
+    )
+  }
+
+  func testDispatchesDrawEndCommandToHandler() async throws {
+    try await runCommandDispatch(
+      json: "{\"cmd\":\"drawEnd\",\"x\":50,\"y\":60}",
+      expected: .drawEnd(x: 50, y: 60)
+    )
+  }
+
+  func testDispatchesDrawCancelCommandToHandler() async throws {
+    try await runCommandDispatch(
+      json: "{\"cmd\":\"drawCancel\"}",
+      expected: .drawCancel
+    )
+  }
+
+  func testDispatchesDrawRectCommandToHandler() async throws {
+    try await runCommandDispatch(
+      json: "{\"cmd\":\"drawRect\",\"startX\":10,\"startY\":20,\"endX\":30,\"endY\":40}",
+      expected: .drawRect(startX: 10, startY: 20, endX: 30, endY: 40)
+    )
+  }
+
   /// Shared body of the per-command dispatch tests. Connects a raw socket,
   /// writes the JSONL payload, and asserts the captured handler invocation.
   private func runCommandDispatch(

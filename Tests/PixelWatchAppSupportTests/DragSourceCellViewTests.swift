@@ -4,38 +4,26 @@ import XCTest
 
 @MainActor
 final class DragSourceCellViewTests: XCTestCase {
-  func testFloatingDragVisualDrawsBlackOutlineOutsideWhiteBorder() {
-    let view = DragFloatVisualView(frame: NSRect(x: 0, y: 0, width: 50, height: 40))
+  func testPlusControlDrawsBorderAndPlus() {
+    let view = DragSourceNSView(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
     let image = render(view)
 
-    let outerStroke = image.colorAt(x: 1, y: 20)!
-    let innerStroke = image.colorAt(x: 4, y: 20)!
+    let border = image.colorAt(x: 2, y: 14)!
+    let center = image.colorAt(x: 14, y: 14)!
 
-    XCTAssertLessThan(outerStroke.redComponent, 0.1)
-    XCTAssertLessThan(outerStroke.greenComponent, 0.1)
-    XCTAssertLessThan(outerStroke.blueComponent, 0.1)
-    XCTAssertGreaterThan(outerStroke.alphaComponent, 0.7)
-
-    XCTAssertGreaterThan(innerStroke.redComponent, 0.75)
-    XCTAssertGreaterThan(innerStroke.greenComponent, 0.75)
-    XCTAssertGreaterThan(innerStroke.blueComponent, 0.75)
-    XCTAssertGreaterThan(innerStroke.alphaComponent, 0.7)
+    XCTAssertGreaterThan(border.alphaComponent, 0.1)
+    XCTAssertGreaterThan(center.alphaComponent, 0.1)
   }
 
-  func testEscapeDuringDragCancelsWithoutDropping() {
-    let view = DragSourceNSView(frame: NSRect(x: 0, y: 0, width: 50, height: 40))
-    var dragStartedCount = 0
-    var dropCount = 0
-    view.onDragStarted = { dragStartedCount += 1 }
-    view.onDrop = { _ in dropCount += 1 }
+  func testMouseUpCallsClickOnce() {
+    let view = DragSourceNSView(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
+    var clickCount = 0
+    view.onClick = { clickCount += 1 }
 
     view.mouseDown(with: mouseEvent(type: .leftMouseDown, location: NSPoint(x: 5, y: 5)))
-    view.mouseDragged(with: mouseEvent(type: .leftMouseDragged, location: NSPoint(x: 20, y: 20)))
-    view.keyDown(with: escapeKeyEvent())
-    view.mouseUp(with: mouseEvent(type: .leftMouseUp, location: NSPoint(x: 20, y: 20)))
+    view.mouseUp(with: mouseEvent(type: .leftMouseUp, location: NSPoint(x: 5, y: 5)))
 
-    XCTAssertEqual(dragStartedCount, 1)
-    XCTAssertEqual(dropCount, 0)
+    XCTAssertEqual(clickCount, 1)
   }
 
   private func render(_ view: NSView) -> NSBitmapImageRep {
@@ -72,21 +60,6 @@ final class DragSourceCellViewTests: XCTestCase {
       eventNumber: 0,
       clickCount: 1,
       pressure: 1
-    )!
-  }
-
-  private func escapeKeyEvent() -> NSEvent {
-    NSEvent.keyEvent(
-      with: .keyDown,
-      location: .zero,
-      modifierFlags: [],
-      timestamp: 0,
-      windowNumber: 0,
-      context: nil,
-      characters: "\u{1b}",
-      charactersIgnoringModifiers: "\u{1b}",
-      isARepeat: false,
-      keyCode: 53
     )!
   }
 }
