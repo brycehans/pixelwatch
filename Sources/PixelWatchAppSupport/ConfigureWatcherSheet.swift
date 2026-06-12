@@ -8,12 +8,13 @@ import SwiftUI
 /// Configure-watcher sheet. Segmented picker selects notification vs shell-command
 /// mode; the text field below adapts to whichever mode is active.
 struct ConfigureWatcherSheetView: View {
-  private enum UIMode { case notification, shell }
+  private enum UIMode { case notification, shell, webhook }
 
   @State private var sensitivity: Double
   @State private var mode: UIMode
   @State private var notificationBody: String
   @State private var shellCommand: String
+  @State private var webhookURL: String
 
   let onSave: (Double, CommandMode, Bool) -> Void
   let onCancel: () -> Void
@@ -29,10 +30,17 @@ struct ConfigureWatcherSheetView: View {
       _mode = State(initialValue: .notification)
       _notificationBody = State(initialValue: body)
       _shellCommand = State(initialValue: "")
+      _webhookURL = State(initialValue: "http://127.0.0.1:9876/event/ping")
     case .shell(let cmd):
       _mode = State(initialValue: .shell)
       _notificationBody = State(initialValue: "")
       _shellCommand = State(initialValue: cmd)
+      _webhookURL = State(initialValue: "http://127.0.0.1:9876/event/ping")
+    case .webhook(let url):
+      _mode = State(initialValue: .webhook)
+      _notificationBody = State(initialValue: "")
+      _shellCommand = State(initialValue: "")
+      _webhookURL = State(initialValue: url)
     }
     self.onSave = onSave
     self.onCancel = onCancel
@@ -51,6 +59,7 @@ struct ConfigureWatcherSheetView: View {
         Picker("When it fires", selection: $mode) {
           Text("Notification").tag(UIMode.notification)
           Text("Run a command").tag(UIMode.shell)
+          Text("Webhook").tag(UIMode.webhook)
         }
         .pickerStyle(.segmented)
         switch mode {
@@ -58,6 +67,8 @@ struct ConfigureWatcherSheetView: View {
           TextField("Message", text: $notificationBody)
         case .shell:
           TextField("Command", text: $shellCommand)
+        case .webhook:
+          TextField("URL", text: $webhookURL)
         }
       }
 
@@ -79,6 +90,7 @@ struct ConfigureWatcherSheetView: View {
     switch mode {
     case .notification: .notification(body: notificationBody)
     case .shell: .shell(command: shellCommand)
+    case .webhook: .webhook(url: webhookURL)
     }
   }
 }

@@ -92,6 +92,22 @@ final class PersistenceTests: XCTestCase {
     XCTAssertEqual(try persistence.load(), [watcher])
   }
 
+  func testSaveAndLoadWebhookModeRoundTrips() throws {
+    let directory = try makeTemporaryDirectory()
+    let persistence = WatcherPersistence(url: directory.appendingPathComponent("watchers.json"))
+    let watcher = Watcher(
+      id: UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!,
+      target: WindowBinding(bundleID: "com.example", titleMatch: .exact("Window")),
+      rect: CGRect(x: 0, y: 0, width: 10, height: 10),
+      sensitivity: 0.5,
+      tickIntervalSeconds: 1,
+      commandMode: .webhook(url: "http://127.0.0.1:9876/event/ping"),
+      armed: false
+    )
+    try persistence.save([watcher])
+    XCTAssertEqual(try persistence.load(), [watcher])
+  }
+
   func testLoadLegacyCommandStringMigratesToShellMode() throws {
     let directory = try makeTemporaryDirectory()
     let url = directory.appendingPathComponent("watchers.json")

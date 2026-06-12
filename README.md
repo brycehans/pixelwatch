@@ -5,7 +5,7 @@ https://github.com/user-attachments/assets/66f02c05-9039-4eac-92c9-5e07cc9fa1ff
 --------
 
 A tiny Mac app that watches a rectangle inside another app's
-window and pings when the pixels change. A ping can post an OS notification, or run a shell command.
+window and pings when the pixels change. A ping can post an OS notification, run a shell command, or fire a webhook.
 
 This makes it useful for watching CI badges, dashboards, queues, build status panels, 
 or any visual state that does not already have a better API.
@@ -72,6 +72,7 @@ If capture fails after granting permission, quit PixelWatch and launch it again.
 5. In the configuration sheet, choose:
    - `Notification` to post a PixelWatch notification.
    - `Run a command` to run a shell command through `/bin/sh -c`.
+   - `Webhook` to POST a JSON payload to a URL.
 6. Adjust sensitivity if needed.
 7. Click `Save & Arm` to start watching immediately, or `Save` to keep the
    watcher idle.
@@ -162,6 +163,41 @@ Hook stdout and stderr are captured to OSLog, not shown in the app:
 ```sh
 log show --predicate 'subsystem == "com.bryce.pixelwatch"' --last 1h
 ```
+
+## Webhook
+
+Webhook mode sends an HTTP `POST` to a URL when a watcher fires. The request
+body is a JSON object containing the same data as the shell-command environment
+variables:
+
+```json
+{
+  "WATCH_ID": "...",
+  "WATCH_AT": "...",
+  "WATCH_REASON": "pixel-change",
+  "WATCH_SCORE": "0.42",
+  "WATCH_THRESHOLD": "0.005",
+  "WATCH_SENSITIVITY": "0.7",
+  "WATCH_WINDOW_APP": "com.example.app",
+  "WATCH_WINDOW_TITLE": "Window Title",
+  "WATCH_RECT": "x,y,width,height"
+}
+```
+
+The request includes `Content-Type: application/json`. PixelWatch waits up to
+10 seconds for a response, then gives up. Exit 0 is recorded for a 2xx
+response, exit 1 for any other HTTP status, and exit 127 for network errors.
+
+The default URL in the configure sheet (`http://127.0.0.1:9876/event/ping`)
+works out of the box with the
+[await-mcp](https://github.com/brycehans/await-mcp) plugin, which lets a Claude
+Code session block until a named event arrives:
+
+```
+/await ping
+```
+
+Then arm the watcher — Claude resumes the moment the watcher fires.
 
 ## URL Automation
 

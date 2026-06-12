@@ -7,7 +7,7 @@ Menu-bar app that watches a window rectangle and runs a shell command when its p
 ### Lifecycle
 
 **Watcher**:
-The configured unit — a named binding from {window, rect, sensitivity, post-fire mode, shell command} to a runtime instance. Persisted as JSON.
+The configured unit — a named binding from {window, rect, sensitivity, post-fire mode, command mode} to a runtime instance. Persisted as JSON. Command mode is one of `shell`, `notification`, or `webhook`.
 
 **Arm**:
 The user action (and event) that brings a Watcher into the `armed` state. Captures a fresh baseline. There is no separate "Re-arm" verb — "Arm" is the only label for the idle/triggered/errored → armed transition.
@@ -59,7 +59,13 @@ Manual only — the user clicks Arm on the errored tile. We re-attempt window re
 ### Hooks
 
 **Hook**:
-The shell command a Watcher runs when it fires. Invoked via `/bin/sh -c "<command>"`, `cwd=~`, **fixed 30 s timeout** (no per-watcher knob in v1 — slow hooks should detach themselves with `(slow-thing &) ; exit 0`), SIGTERM then SIGKILL the process group. Exit code is logged but never alters Watcher state. No coalescing across Watchers — N simultaneous fires spawn N shells.
+The action a Watcher takes when it fires. Three modes:
+
+- **Shell**: runs `/bin/sh -c "<command>"`, `cwd=~`, **fixed 30 s timeout** (no per-watcher knob in v1 — slow hooks should detach themselves with `(slow-thing &) ; exit 0`), SIGTERM then SIGKILL the process group.
+- **Notification**: posts an OS notification via `terminal-notifier`.
+- **Webhook**: sends `POST <url>` with a JSON body containing the hook environment variables (see README). **10 s timeout.** Exit 0 for 2xx, exit 1 for non-2xx, exit 127 for network errors.
+
+Exit code is logged but never alters Watcher state. No coalescing across Watchers — N simultaneous fires spawn N actions.
 
 **Hook output**:
 stdout and stderr are captured and emitted to OSLog under `subsystem=com.bryce.pixelwatch, category=hook` (tag: watcher name + exit code + first ~4 KB of each stream). User finds it via `log show --predicate 'subsystem == "com.bryce.pixelwatch"' --last 1h`. There is no in-app UI for hook output.

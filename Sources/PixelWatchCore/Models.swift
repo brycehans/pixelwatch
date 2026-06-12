@@ -6,11 +6,13 @@ public typealias WatcherID = UUID
 public enum CommandMode: Codable, Equatable, Sendable {
   case shell(command: String)
   case notification(body: String)
+  case webhook(url: String)
 
   public var displayString: String {
     switch self {
     case .shell(let cmd): return cmd
     case .notification(let body): return "[notification] \(body)"
+    case .webhook(let url): return "[webhook] \(url)"
     }
   }
 }

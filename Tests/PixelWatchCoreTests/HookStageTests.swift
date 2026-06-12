@@ -149,6 +149,78 @@ final class HookStageTests: XCTestCase {
     XCTAssertEqual(posts[0].body, "Build done")
     XCTAssertEqual(posts[0].identifier, "\(watcher.id.uuidString)-pixel-change")
   }
+
+  func testWebhookModePostsAndPublishesLifecycleEvents() async {
+    let bus = EventBus()
+    let store = WatcherStore(bus: bus)
+    let runner = RecordingHookRunner(result: HookResult(exit: 0, stdout: "", stderr: "", timedOut: false))
+    let webhookPoster = RecordingWebhookPoster(result: HookResult(exit: 0, stdout: "ok", stderr: "", timedOut: false))
+    let watcher = Watcher(
+      id: UUID(),
+      target: WindowBinding(bundleID: "com.example.ci", titleMatch: .exact("Builds")),
+      rect: CGRect(x: 0, y: 0, width: 10, height: 10),
+      sensitivity: 0.5,
+      tickIntervalSeconds: 1,
+      commandMode: .webhook(url: "http://127.0.0.1:9876/event/ping"),
+      armed: false
+    )
+    let frame = PixelBuffer(width: 1, height: 1, linearRGB: [1, 1, 1])
+
+    await store.add(watcher)
+    await store.start()
+    let hookTask = HookStage.start(bus: bus, store: store, runner: runner, webhookPoster: webhookPoster)
+    let events = await EventReader(stream: bus.subscribe())
+    await events.start()
+    await waitUntil { await bus.subscriberCount == 3 }
+    defer { hookTask.cancel() }
+
+    await bus.publish(.thresholdExceeded(watcherID: watcher.id, score: 0.9, frame: frame))
+
+    let started = await events.next { if case .hookStarted = $0 { return true }; return false }
+    let finished = await events.next { if case .hookFinished = $0 { return true }; return false }
+
+    guard case let .hookStarted(startedID, command, reason) = started else {
+      return XCTFail("expected hookStarted")
+    }
+    XCTAssertEqual(startedID, watcher.id)
+    XCTAssertEqual(command, "[webhook] http://127.0.0.1:9876/event/ping")
+    XCTAssertEqual(reason, .pixelChange)
+
+    guard case let .hookFinished(finishedID, exit, stdout, _) = finished else {
+      return XCTFail("expected hookFinished")
+    }
+    XCTAssertEqual(finishedID, watcher.id)
+    XCTAssertEqual(exit, 0)
+    XCTAssertEqual(stdout, "ok")
+
+    let invocations = await runner.invocations
+    XCTAssertTrue(invocations.isEmpty, "shell runner must not be called for webhook mode")
+
+    let posts = await webhookPoster.posts
+    XCTAssertEqual(posts.count, 1)
+    XCTAssertEqual(posts[0].url, "http://127.0.0.1:9876/event/ping")
+    XCTAssertEqual(posts[0].payload["WATCH_WINDOW_APP"], "com.example.ci")
+    XCTAssertEqual(posts[0].payload["WATCH_REASON"], "pixel-change")
+  }
+}
+
+private actor RecordingWebhookPoster: WebhookPosting {
+  struct Post {
+    let url: String
+    let payload: [String: String]
+  }
+
+  private let result: HookResult
+  private(set) var posts: [Post] = []
+
+  init(result: HookResult) {
+    self.result = result
+  }
+
+  func post(url: String, payload: [String: String]) async -> HookResult {
+    posts.append(Post(url: url, payload: payload))
+    return result
+  }
 }
 
 private actor RecordingNotificationPoster: NotificationPosting {

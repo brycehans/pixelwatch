@@ -131,6 +131,7 @@ public enum HookStage {
     store: WatcherStore,
     runner: some HookRunning = LiveHookRunner(),
     poster: some NotificationPosting = NotificationPoster(),
+    webhookPoster: some WebhookPosting = LiveWebhookPoster(),
     timeout: TimeInterval = 30
   ) -> Task<Void, Never> {
     Task {
@@ -166,6 +167,19 @@ public enum HookStage {
             exit: 0,
             stdout: "",
             stderr: ""
+          ))
+        case .webhook(let url):
+          await bus.publish(.hookStarted(
+            watcherID: fire.watcher.id,
+            command: "[webhook] \(url)",
+            reason: fire.reason
+          ))
+          let result = await webhookPoster.post(url: url, payload: fire.env)
+          await bus.publish(.hookFinished(
+            watcherID: fire.watcher.id,
+            exit: result.exit,
+            stdout: result.stdout,
+            stderr: result.stderr
           ))
         }
       }

@@ -7,7 +7,6 @@ build:
 	swift build -c release
 
 bundle: build
-	rm -rf $(BUNDLE)
 	mkdir -p $(BUNDLE)/Contents/MacOS
 	cp $(BINARY) $(BUNDLE)/Contents/MacOS/pixelwatch
 	cp Sources/pixelwatch/Info.plist $(BUNDLE)/Contents/Info.plist

@@ -214,3 +214,32 @@ public final class NotificationPoster: NotificationPosting, Sendable {
     _ = await HookRunner.run(command: cmd, env: [:], timeout: 10)
   }
 }
+
+// MARK: - WebhookPosting
+
+public protocol WebhookPosting: Sendable {
+  func post(url: String, payload: [String: String]) async -> HookResult
+}
+
+public final class LiveWebhookPoster: WebhookPosting, Sendable {
+  public init() {}
+
+  public func post(url: String, payload: [String: String]) async -> HookResult {
+    guard let requestURL = URL(string: url) else {
+      return HookResult(exit: 127, stdout: "", stderr: "invalid URL: \(url)", timedOut: false)
+    }
+    var request = URLRequest(url: requestURL)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.timeoutInterval = 10
+    do {
+      request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+      let (data, response) = try await URLSession.shared.data(for: request)
+      let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+      let body = String(decoding: data, as: UTF8.self)
+      return HookResult(exit: (200..<300).contains(status) ? 0 : 1, stdout: body, stderr: "", timedOut: false)
+    } catch {
+      return HookResult(exit: 127, stdout: "", stderr: error.localizedDescription, timedOut: false)
+    }
+  }
+}
