@@ -260,7 +260,9 @@ private final class WatchAreaDrawPanel: NSPanel {
 }
 
 @MainActor
-private final class WatchAreaDrawView: NSView {
+final class WatchAreaDrawView: NSView {
+  static let promptText = "Click and drag over any window to create a watch area"
+
   var targetWindowBounds: CGRect? {
     didSet { needsDisplay = true }
   }
@@ -275,7 +277,10 @@ private final class WatchAreaDrawView: NSView {
 
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
-    guard let targetWindowBounds else { return }
+    guard let targetWindowBounds else {
+      drawPrompt()
+      return
+    }
 
     NSColor.black.withAlphaComponent(0.45).setFill()
     bounds.fill()
@@ -312,6 +317,32 @@ private final class WatchAreaDrawView: NSView {
       at: CGPoint(
         x: labelRect.midX - size.width / 2,
         y: labelRect.midY - size.height / 2
+      )
+    )
+  }
+
+  private func drawPrompt() {
+    let attrs: [NSAttributedString.Key: Any] = [
+      .font: NSFont.systemFont(ofSize: 13, weight: .medium),
+      .foregroundColor: NSColor.white,
+    ]
+    let text = NSAttributedString(string: Self.promptText, attributes: attrs)
+    let textSize = text.size()
+    let horizontalPadding: CGFloat = 18
+    let promptRect = CGRect(
+      x: bounds.midX - (textSize.width + horizontalPadding * 2) / 2,
+      y: 14,
+      width: textSize.width + horizontalPadding * 2,
+      height: 34
+    )
+
+    NSColor.black.withAlphaComponent(0.72).setFill()
+    NSBezierPath(roundedRect: promptRect, xRadius: 8, yRadius: 8).fill()
+
+    text.draw(
+      at: CGPoint(
+        x: promptRect.midX - textSize.width / 2,
+        y: promptRect.midY - textSize.height / 2
       )
     )
   }

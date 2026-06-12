@@ -5,6 +5,13 @@ import XCTest
 
 @MainActor
 final class WatchAreaDrawSessionTests: XCTestCase {
+  func testInitialDrawViewShowsDrawModePromptBeforeWindowSelection() {
+    let view = WatchAreaDrawView(frame: NSRect(x: 0, y: 0, width: 500, height: 300))
+    let image = render(view)
+
+    XCTAssertTrue(containsVisiblePromptBackground(in: image))
+  }
+
   func testValidDragCompletesWithWindowAndClampedScreenRect() {
     let window = WindowSnapshot(
       windowID: 42,
@@ -77,5 +84,43 @@ final class WatchAreaDrawSessionTests: XCTestCase {
     )
 
     XCTAssertEqual(session.cancel(), .failure(.cancelled))
+  }
+
+  private func render(_ view: NSView) -> NSBitmapImageRep {
+    let rep = NSBitmapImageRep(
+      bitmapDataPlanes: nil,
+      pixelsWide: Int(view.bounds.width),
+      pixelsHigh: Int(view.bounds.height),
+      bitsPerSample: 8,
+      samplesPerPixel: 4,
+      hasAlpha: true,
+      isPlanar: false,
+      colorSpaceName: .deviceRGB,
+      bytesPerRow: 0,
+      bitsPerPixel: 0
+    )!
+    let context = NSGraphicsContext(bitmapImageRep: rep)!
+
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = context
+    view.draw(view.bounds)
+    NSGraphicsContext.restoreGraphicsState()
+
+    return rep
+  }
+
+  private func containsVisiblePromptBackground(in image: NSBitmapImageRep) -> Bool {
+    for x in 0..<image.pixelsWide {
+      for y in 0..<image.pixelsHigh {
+        guard let color = image.colorAt(x: x, y: y) else { continue }
+        if color.redComponent < 0.1,
+           color.greenComponent < 0.1,
+           color.blueComponent < 0.1,
+           color.alphaComponent > 0.35 {
+          return true
+        }
+      }
+    }
+    return false
   }
 }
