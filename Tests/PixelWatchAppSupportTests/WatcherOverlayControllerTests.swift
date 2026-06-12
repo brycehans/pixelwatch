@@ -40,12 +40,12 @@ final class WatcherOverlayControllerTests: XCTestCase {
       bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
       isVisible: true
     )
-    var frontmostPID: pid_t = 99
+    let frontmostPID = MutablePID(99)
     let controller = WatcherOverlayController(
       overlayFactory: { _ in overlay },
       mouseLocationProvider: { CGPoint(x: 220, y: 180) },
       windowSnapshotProvider: StubWindowSnapshotProvider(snapshots: [snapshot]),
-      frontmostProcessIDProvider: { frontmostPID }
+      frontmostProcessIDProvider: { frontmostPID.value }
     )
 
     // begin() emits one setVisible(true). sync() appends one value per call.
@@ -54,11 +54,11 @@ final class WatcherOverlayControllerTests: XCTestCase {
     controller.sync()
     XCTAssertEqual(overlay.visibleValues, [true, true])  // target is frontmost → visible
 
-    frontmostPID = 88
+    frontmostPID.value = 88
     controller.sync()
     XCTAssertEqual(overlay.visibleValues, [true, true, false])  // user Cmd+Tabbed away → hidden
 
-    frontmostPID = 99
+    frontmostPID.value = 99
     controller.sync()
     XCTAssertEqual(overlay.visibleValues, [true, true, false, true])  // Cmd+Tab back → visible
   }
@@ -396,6 +396,79 @@ final class WatcherOverlayControllerTests: XCTestCase {
     controller.remove(watcherID: UUID())
   }
 
+  func testRegisterWiresOverlayActionsToWatcherID() {
+    let overlay = RecordingOverlayWindow()
+    let snapshot = WindowSnapshot(
+      windowID: 42,
+      processID: 99,
+      bundleID: "com.example",
+      title: "Editor",
+      bounds: CGRect(x: 100, y: 100, width: 500, height: 400),
+      isVisible: true
+    )
+    var removedIDs: [WatcherID] = []
+    var rearmedIDs: [WatcherID] = []
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { CGPoint(x: 220, y: 180) },
+      windowSnapshotProvider: StubWindowSnapshotProvider(snapshots: [snapshot]),
+      onRemoveRequested: { removedIDs.append($0) },
+      onRearmRequested: { rearmedIDs.append($0) },
+      frontmostProcessIDProvider: { 99 }
+    )
+
+    let session = controller.begin(windowID: 42)
+    XCTAssertEqual(overlay.actionHandlerStates, [false])
+
+    session.freeze()
+    let watcherID = UUID()
+    controller.register(watcherID: watcherID, for: session)
+    XCTAssertEqual(overlay.actionHandlerStates, [false, true])
+
+    overlay.triggerRemove()
+    overlay.triggerRearm()
+
+    XCTAssertEqual(removedIDs, [watcherID])
+    XCTAssertEqual(rearmedIDs, [watcherID])
+  }
+
+  func testRestoreWiresOverlayActionsToWatcherID() {
+    let overlay = RecordingOverlayWindow()
+    let snapshot = WindowSnapshot(
+      windowID: 42,
+      processID: 99,
+      bundleID: "com.example",
+      title: "Editor",
+      bounds: CGRect(x: 200, y: 100, width: 800, height: 600),
+      isVisible: true
+    )
+    var removedIDs: [WatcherID] = []
+    var rearmedIDs: [WatcherID] = []
+    let controller = WatcherOverlayController(
+      overlayFactory: { _ in overlay },
+      mouseLocationProvider: { .zero },
+      windowSnapshotProvider: StubWindowSnapshotProvider(snapshots: [snapshot]),
+      onRemoveRequested: { removedIDs.append($0) },
+      onRearmRequested: { rearmedIDs.append($0) },
+      frontmostProcessIDProvider: { 99 }
+    )
+    let watcherID = UUID()
+
+    controller.restore(
+      watcherID: watcherID,
+      windowID: 42,
+      windowRelativeRect: CGRect(x: 0, y: 0, width: 50, height: 50),
+      state: .idle
+    )
+
+    XCTAssertEqual(overlay.actionHandlerStates, [true])
+    overlay.triggerRemove()
+    overlay.triggerRearm()
+
+    XCTAssertEqual(removedIDs, [watcherID])
+    XCTAssertEqual(rearmedIDs, [watcherID])
+  }
+
   func testSessionCancelHidesOverlayAndStopsTracking() async {
     let overlay = RecordingOverlayWindow()
     let controller = WatcherOverlayController(
@@ -445,11 +518,22 @@ private final class MutableWindowSnapshotProvider: WindowSnapshotProviding, @unc
   }
 }
 
+private final class MutablePID: @unchecked Sendable {
+  var value: pid_t
+
+  init(_ value: pid_t) {
+    self.value = value
+  }
+}
+
 private final class RecordingOverlayWindow: WatcherOverlayWindow {
   private(set) var frames: [CGRect] = []
   private(set) var borderColors: [NSColor] = []
   private(set) var visibleValues: [Bool] = []
   private(set) var labelTexts: [String] = []
+  private(set) var actionHandlerStates: [Bool] = []
+  private var removeAction: (() -> Void)?
+  private var rearmAction: (() -> Void)?
 
   func setFrame(_ frame: CGRect) {
     frames.append(frame)
@@ -465,5 +549,19 @@ private final class RecordingOverlayWindow: WatcherOverlayWindow {
 
   func setLabelText(_ text: String) {
     labelTexts.append(text)
+  }
+
+  func setActionHandlers(onRemove: (() -> Void)?, onRearm: (() -> Void)?) {
+    removeAction = onRemove
+    rearmAction = onRearm
+    actionHandlerStates.append(onRemove != nil && onRearm != nil)
+  }
+
+  func triggerRemove() {
+    removeAction?()
+  }
+
+  func triggerRearm() {
+    rearmAction?()
   }
 }

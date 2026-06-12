@@ -33,11 +33,13 @@ public protocol WatcherOverlayWindow: AnyObject {
   func setBorderColor(_ color: NSColor)
   func setVisible(_ visible: Bool)
   func setLabelText(_ text: String)
+  func setActionHandlers(onRemove: (() -> Void)?, onRearm: (() -> Void)?)
 }
 
 public extension WatcherOverlayWindow {
   // Default no-op so non-label-aware stubs in tests don't need to opt in.
   func setLabelText(_: String) {}
+  func setActionHandlers(onRemove _: (() -> Void)?, onRearm _: (() -> Void)?) {}
 }
 
 /// Provides live window geometry by window ID. Sendable so the controller can
@@ -163,10 +165,14 @@ func screenBottomLeftRect(fromTopLeft frame: CGRect, screenHeight: CGFloat) -> C
 /// strip holds a state-name label, the bottom matches the watched area and
 /// carries the colored border.
 private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlayWindow {
-  static let labelHeight: CGFloat = 18
+  static let labelHeight: CGFloat = 22
 
   private let borderLayer = CALayer()
   private let labelLayer = CATextLayer()
+  private let rearmButton = NSButton()
+  private let removeButton = NSButton()
+  private var onRemove: (() -> Void)?
+  private var onRearm: (() -> Void)?
 
   override init(
     contentRect: NSRect,
@@ -207,6 +213,22 @@ private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlay
     // sits naturally near the top; nudge baseline by setting a small inset
     // via geometry rather than alignment (CATextLayer has no vertical align).
     content.layer?.addSublayer(labelLayer)
+
+    configureControlButton(
+      rearmButton,
+      symbolName: "arrow.clockwise",
+      accessibilityDescription: "Re-arm watch area",
+      action: #selector(rearmClicked(_:))
+    )
+    configureControlButton(
+      removeButton,
+      symbolName: "xmark",
+      accessibilityDescription: "Remove watch area",
+      action: #selector(removeClicked(_:))
+    )
+    content.addSubview(rearmButton)
+    content.addSubview(removeButton)
+    setActionHandlers(onRemove: nil, onRearm: nil)
   }
 
   func setFrame(_ frame: CGRect) {
@@ -240,11 +262,26 @@ private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlay
     labelLayer.string = text
   }
 
+  func setActionHandlers(onRemove: (() -> Void)?, onRearm: (() -> Void)?) {
+    self.onRemove = onRemove
+    self.onRearm = onRearm
+    removeButton.isHidden = onRemove == nil
+    rearmButton.isHidden = onRearm == nil
+    layoutSublayers()
+  }
+
   /// Lay out the border and label sublayers inside contentView. contentView
   /// uses bottom-left coords by default, so the label (visually at the top)
   /// has the larger y origin.
   private func layoutSublayers() {
     guard let bounds = contentView?.bounds else { return }
+    let buttonSize: CGFloat = 18
+    let buttonSpacing: CGFloat = 3
+    let rightPadding: CGFloat = 4
+    let controlsWidth = buttonSize * 2 + buttonSpacing + rightPadding * 2
+    let labelWidth = removeButton.isHidden && rearmButton.isHidden
+      ? bounds.width
+      : max(0, bounds.width - controlsWidth)
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     borderLayer.frame = CGRect(
@@ -255,10 +292,54 @@ private final class WatcherOverlayPanel: NSPanel, @preconcurrency WatcherOverlay
     labelLayer.frame = CGRect(
       x: 0,
       y: bounds.height - Self.labelHeight,
-      width: bounds.width,
+      width: labelWidth,
       height: Self.labelHeight
     )
     CATransaction.commit()
+
+    let buttonY = bounds.height - Self.labelHeight + (Self.labelHeight - buttonSize) / 2
+    removeButton.frame = CGRect(
+      x: bounds.width - rightPadding - buttonSize,
+      y: buttonY,
+      width: buttonSize,
+      height: buttonSize
+    )
+    rearmButton.frame = CGRect(
+      x: removeButton.frame.minX - buttonSpacing - buttonSize,
+      y: buttonY,
+      width: buttonSize,
+      height: buttonSize
+    )
+  }
+
+  private func configureControlButton(
+    _ button: NSButton,
+    symbolName: String,
+    accessibilityDescription: String,
+    action: Selector
+  ) {
+    button.bezelStyle = .regularSquare
+    button.isBordered = false
+    button.image = NSImage(
+      systemSymbolName: symbolName,
+      accessibilityDescription: accessibilityDescription
+    )
+    button.imagePosition = .imageOnly
+    button.contentTintColor = .white
+    button.target = self
+    button.action = action
+    button.toolTip = accessibilityDescription
+    button.wantsLayer = true
+    button.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+    button.layer?.cornerRadius = 5
+  }
+
+  @objc private func removeClicked(_: Any?) {
+    onRemove?()
+  }
+
+  @objc private func rearmClicked(_: Any?) {
+    onRearm?()
   }
 }
 
@@ -285,6 +366,8 @@ public final class WatcherOverlayController {
   /// cursor-follow + click monitors. Test paths omit this so no real NSEvent
   /// monitors are installed.
   private let sessionDidStart: @MainActor (any WatcherOverlaySession) -> Void
+  private let onRemoveRequested: @MainActor (WatcherID) -> Void
+  private let onRearmRequested: @MainActor (WatcherID) -> Void
   /// Returns the PID of the currently-frontmost application, or nil if unknown.
   /// `sync()` hides any overlay whose target window's PID doesn't match this.
   private let frontmostProcessIDProvider: @MainActor () -> pid_t?
@@ -310,6 +393,8 @@ public final class WatcherOverlayController {
     mouseLocationProvider: @escaping () -> CGPoint,
     windowSnapshotProvider: some WindowSnapshotProviding,
     sessionDidStart: @escaping @MainActor (any WatcherOverlaySession) -> Void = { _ in },
+    onRemoveRequested: @escaping @MainActor (WatcherID) -> Void = { _ in },
+    onRearmRequested: @escaping @MainActor (WatcherID) -> Void = { _ in },
     frontmostProcessIDProvider: @escaping @MainActor () -> pid_t? = {
       NSWorkspace.shared.frontmostApplication?.processIdentifier
     }
@@ -318,11 +403,16 @@ public final class WatcherOverlayController {
     self.mouseLocationProvider = mouseLocationProvider
     self.windowSnapshotProvider = windowSnapshotProvider
     self.sessionDidStart = sessionDidStart
+    self.onRemoveRequested = onRemoveRequested
+    self.onRearmRequested = onRearmRequested
     self.frontmostProcessIDProvider = frontmostProcessIDProvider
   }
 
   /// Convenience init that wires up live AppKit dependencies.
-  public convenience init() {
+  public convenience init(
+    onRemoveRequested: @escaping @MainActor (WatcherID) -> Void = { _ in },
+    onRearmRequested: @escaping @MainActor (WatcherID) -> Void = { _ in }
+  ) {
     self.init(
       overlayFactory: { _ in
         // The controller is @MainActor; this closure is only called from begin()
@@ -346,7 +436,9 @@ public final class WatcherOverlayController {
       windowSnapshotProvider: CGWindowSnapshotProvider(),
       sessionDidStart: { session in
         (session as? DefaultWatcherOverlaySession)?.startTracking()
-      }
+      },
+      onRemoveRequested: onRemoveRequested,
+      onRearmRequested: onRearmRequested
     )
   }
 
@@ -385,6 +477,7 @@ public final class WatcherOverlayController {
     overlay.setVisible(true)
     overlay.setBorderColor(OverlayAppearance.borderColor(for: .idle))
     overlay.setLabelText(OverlayAppearance.labelText(for: .idle))
+    overlay.setActionHandlers(onRemove: nil, onRearm: nil)
 
     entries[sessionID] = OverlayEntry(session: session, overlay: overlay, windowID: windowID)
 
@@ -431,6 +524,10 @@ public final class WatcherOverlayController {
     overlay.setVisible(true)
     overlay.setBorderColor(OverlayAppearance.borderColor(for: state))
     overlay.setLabelText(OverlayAppearance.labelText(for: state))
+    overlay.setActionHandlers(
+      onRemove: { [weak self] in self?.onRemoveRequested(watcherID) },
+      onRearm: { [weak self] in self?.onRearmRequested(watcherID) }
+    )
 
     entries[watcherID] = OverlayEntry(
       session: session,
@@ -461,12 +558,17 @@ public final class WatcherOverlayController {
     entry.anchorBounds = entry.session.anchorBounds
       ?? windowSnapshotProvider.windowSnapshot(windowID: entry.windowID)?.bounds
     entries.removeValue(forKey: currentKey)
+    entry.overlay.setActionHandlers(
+      onRemove: { [weak self] in self?.onRemoveRequested(watcherID) },
+      onRearm: { [weak self] in self?.onRearmRequested(watcherID) }
+    )
     entries[watcherID] = entry
   }
 
   /// Hide and remove the overlay for a watcher. No-op if the watcher ID is not registered.
   public func remove(watcherID: WatcherID) {
     guard let entry = entries[watcherID] else { return }
+    entry.overlay.setActionHandlers(onRemove: nil, onRearm: nil)
     entry.overlay.setVisible(false)
     entries.removeValue(forKey: watcherID)
   }

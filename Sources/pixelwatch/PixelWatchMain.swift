@@ -61,7 +61,10 @@ private final class PixelWatchAppDelegate: NSObject, NSApplicationDelegate {
     return p
   }()
 
-  private let overlayController = WatcherOverlayController()
+  private lazy var overlayController = WatcherOverlayController(
+    onRemoveRequested: { [weak self] id in self?.handleDeleteWatcher(id: id) },
+    onRearmRequested: { [weak self] id in self?.handleArmWatcher(id: id) }
+  )
   private var syncTimer: Timer?
   private var debugSocket: DebugSocket?
   private var debugDrawSession: WatchAreaDrawSession?
