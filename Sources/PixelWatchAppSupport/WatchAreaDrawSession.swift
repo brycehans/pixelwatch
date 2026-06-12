@@ -28,6 +28,7 @@ public final class WatchAreaDrawSession {
   private let bundleIdentifierForProcessID: (pid_t) -> String?
 
   private var selectedWindow: WindowSnapshot?
+  private var hoveredWindow: WindowSnapshot?
   private var startPoint: CGPoint?
   private var overlayPanel: WatchAreaDrawPanel?
   private var continuation: CheckedContinuation<DrawResult, Never>?
@@ -85,6 +86,17 @@ public final class WatchAreaDrawSession {
 
   public func prepareForProgrammaticInput() {
     installOverlay()
+  }
+
+  var hoveredWindowForTesting: WindowSnapshot? {
+    hoveredWindow
+  }
+
+  public func updateHover(atAppKitPoint appKitPoint: CGPoint) {
+    guard selectedWindow == nil else { return }
+    let screenHeight = screenHeightProvider()
+    hoveredWindow = windowResolver(appKitPoint, screenHeight)
+    overlayPanel?.setTargetWindowBounds(hoveredWindow?.bounds)
   }
 
   public func begin(atAppKitPoint appKitPoint: CGPoint) -> DrawResult? {
@@ -164,6 +176,9 @@ public final class WatchAreaDrawSession {
         self.finish(result)
       }
     }
+    overlayPanel?.onMouseMoved = { [weak self] point in
+      self?.updateHover(atAppKitPoint: point)
+    }
     overlayPanel?.onMouseDragged = { [weak self] point in
       self?.updatePreview(atAppKitPoint: point)
     }
@@ -194,6 +209,7 @@ public final class WatchAreaDrawSession {
 private final class WatchAreaDrawPanel: NSPanel {
   private let drawView = WatchAreaDrawView(frame: .zero)
   var onMouseDown: @MainActor (CGPoint) -> Void = { _ in }
+  var onMouseMoved: @MainActor (CGPoint) -> Void = { _ in }
   var onMouseDragged: @MainActor (CGPoint) -> Void = { _ in }
   var onMouseUp: @MainActor (CGPoint) -> Void = { _ in }
   var onCancel: @MainActor () -> Void = {}
@@ -217,6 +233,7 @@ private final class WatchAreaDrawPanel: NSPanel {
     backgroundColor = .clear
     hasShadow = false
     ignoresMouseEvents = false
+    acceptsMouseMovedEvents = true
     contentView = drawView
   }
 
@@ -227,6 +244,10 @@ private final class WatchAreaDrawPanel: NSPanel {
 
   override func mouseDown(with event: NSEvent) {
     onMouseDown(appKitScreenPoint(for: event))
+  }
+
+  override func mouseMoved(with event: NSEvent) {
+    onMouseMoved(appKitScreenPoint(for: event))
   }
 
   override func mouseDragged(with event: NSEvent) {
@@ -245,7 +266,7 @@ private final class WatchAreaDrawPanel: NSPanel {
     onCancel()
   }
 
-  func setTargetWindowBounds(_ bounds: CGRect) {
+  func setTargetWindowBounds(_ bounds: CGRect?) {
     drawView.targetWindowBounds = bounds
   }
 
